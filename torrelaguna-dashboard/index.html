@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Torre Laguna | Dashboard de obra</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <div>
+            <strong>Torre Laguna</strong>
+            <small>Cortes de campo</small>
+          </div>
+        </div>
+        <nav class="nav">
+          <button class="nav-item active" data-section="overview">Resumen</button>
+          <button class="nav-item" data-section="actas">Actas</button>
+          <button class="nav-item" data-section="activities">Actividades</button>
+          <button class="nav-item" data-section="pending">Alertas</button>
+          <button class="nav-item" data-section="trace">Trazabilidad</button>
+        </nav>
+        <div class="sidebar-note">
+          <span>Base</span>
+          <strong id="sourceWorkbook">Cargando...</strong>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Reforma segundo piso · Motorlaguna</p>
+            <h1>Dashboard de campo</h1>
+          </div>
+          <div class="topbar-actions">
+            <label class="search">
+              <span>Buscar</span>
+              <input id="searchInput" type="search" placeholder="Ítem, actividad, fuente..." />
+            </label>
+            <select id="actaFilter" aria-label="Filtrar por acta">
+              <option value="all">Todas las actas</option>
+            </select>
+          </div>
+        </header>
+
+        <section class="section active" id="overview">
+          <div class="signal-strip">
+            <button class="signal active" data-focus="pending">
+              <span>Prioridad de hoy</span>
+              <strong id="todayPriority">Revisar alertas</strong>
+            </button>
+            <button class="signal" data-focus="activities">
+              <span>Riesgo de control</span>
+              <strong id="riskSignal">Sobreejecuciones</strong>
+            </button>
+            <button class="signal" data-focus="trace">
+              <span>Evidencia</span>
+              <strong>Fuente por movimiento</strong>
+            </button>
+          </div>
+
+          <div class="kpi-grid">
+            <article class="metric primary">
+              <span>Avance valorizado</span>
+              <strong id="progressValue">0%</strong>
+              <small id="progressLabel">Calculado sobre presupuesto base</small>
+            </article>
+            <article class="metric">
+              <span>Ejecutado</span>
+              <strong id="executedValue">$0</strong>
+              <small id="sourceCount">0 movimientos con fuente</small>
+            </article>
+            <article class="metric">
+              <span>Saldo presupuesto</span>
+              <strong id="balanceValue">$0</strong>
+              <small id="activeCount">0 actividades activas</small>
+            </article>
+            <article class="metric attention">
+              <span>Pendientes</span>
+              <strong id="pendingValue">0</strong>
+              <small id="pendingLabel">Por revisar antes de automatizar</small>
+            </article>
+          </div>
+
+          <div class="overview-layout">
+            <section class="panel progress-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Lectura de avance</h2>
+                  <p>Lectura directa de la hoja CORTES_OBRA del archivo que está usando el equipo en campo.</p>
+                </div>
+                <span id="budgetTotal" class="quiet-number">$0</span>
+              </div>
+              <div class="progress-rail">
+                <span id="progressBar"></span>
+              </div>
+              <div class="split-values">
+                <div>
+                  <span>Ejecutado</span>
+                  <strong id="executedSplit">$0</strong>
+                </div>
+                <div>
+                  <span>No ejecutado</span>
+                  <strong id="notExecutedSplit">$0</strong>
+                </div>
+                <div>
+                  <span>Adicional estimado</span>
+                  <strong id="additionalSplit">$0</strong>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Capítulos con mayor ejecución</h2>
+                  <p>Ordenado por valor acumulado desde las actas del archivo vivo.</p>
+                </div>
+              </div>
+              <div id="chapterBars" class="bar-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="section" id="actas">
+          <div class="section-title">
+            <h2>Actas y cortes</h2>
+            <p>Cada corte se lee desde las columnas de acta de la hoja CORTES_OBRA.</p>
+          </div>
+          <div id="actaRows" class="acta-list"></div>
+        </section>
+
+        <section class="section" id="activities">
+          <div class="section-title">
+            <h2>Matriz de actividades</h2>
+            <p>La hoja PROYECCIÓN leída como tablero: presupuesto, ejecutado, saldo y alerta.</p>
+          </div>
+          <div class="segmented" id="activityStatusFilter">
+            <button class="active" data-status="all">Todas</button>
+            <button data-status="En ejecución">En ejecución</button>
+            <button data-status="Sobreejecutado">Sobreejecutadas</button>
+            <button data-status="Adicional">Adicionales</button>
+            <button data-status="No ejecutado">No ejecutadas</button>
+            <button data-status="Sin avance">Sin avance</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ítem</th>
+                  <th>Actividad</th>
+                  <th>Und</th>
+                  <th>Presupuesto</th>
+                  <th>Ejecutado</th>
+                  <th>Avance</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="activityTable"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" id="pending">
+          <div class="section-title">
+            <h2>Alertas de archivo</h2>
+            <p>Filas y diferencias que conviene resolver antes de automatizar cortes desde este libro.</p>
+          </div>
+          <div class="segmented" id="pendingStatusFilter">
+            <button class="active" data-status="all">Todos</button>
+            <button data-status="SIN_COINCIDENCIA">Sin coincidencia</button>
+            <button data-status="REVISAR">Revisar</button>
+            <button data-status="EXCLUIDO">Excluidos</button>
+            <button data-status="RESUELTO">Resueltos</button>
+          </div>
+          <div class="decision-toolbar">
+            <span id="decisionCount">0 revisiones locales</span>
+            <button id="exportDecisions">Exportar revisiones</button>
+            <button id="clearDecisions">Reiniciar revisiones</button>
+          </div>
+          <div id="pendingList" class="review-list"></div>
+        </section>
+
+        <section class="section" id="trace">
+          <div class="section-title">
+            <h2>Trazabilidad de fuentes</h2>
+            <p>De cada cantidad de acta a su fila, celda y valor dentro de CORTES_OBRA.</p>
+          </div>
+          <div id="traceList" class="trace-list"></div>
+        </section>
+      </main>
+
+      <aside class="inspector" id="inspector" aria-live="polite">
+        <button class="inspector-close" id="inspectorClose" aria-label="Cerrar">×</button>
+        <span class="inspector-kicker">Detalle</span>
+        <h2 id="inspectorTitle">Selecciona una fila</h2>
+        <p id="inspectorBody">Haz clic en una actividad, pendiente o fuente para ver su trazabilidad aquí.</p>
+        <div id="inspectorMeta" class="inspector-meta"></div>
+        <div id="inspectorActions" class="inspector-actions"></div>
+      </aside>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
