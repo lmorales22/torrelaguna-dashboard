@@ -249,6 +249,100 @@ function renderActas() {
   });
 }
 
+function renderClient() {
+  const { summary, project } = state.data;
+  const actas = state.data.actas.filter((acta) => acta.value > 0);
+  const chapters = state.data.chapters.filter((chapter) => chapter.executed > 0).slice(0, 7);
+  const maxActa = Math.max(...actas.map((acta) => acta.value), 1);
+  const contractTotal = summary.contractTotal || summary.budgetTotal;
+  const executedTotal = summary.executedContractTotal || summary.executedTotal;
+  const balance = Math.max(contractTotal - executedTotal, 0);
+
+  $("#clientFreshness").textContent = `Corte generado desde ${project.sourceSheet || "CORTES_OBRA"} · ${project.generatedAt || project.updatedAt}`;
+  $("#clientProgressValue").textContent = formatPercent(summary.contractProgress || summary.progress);
+  $("#clientContractTotal").textContent = formatMoney(contractTotal);
+  $("#clientExecutedTotal").textContent = formatMoney(executedTotal);
+  $("#clientBalanceTotal").textContent = formatMoney(balance);
+  $("#clientActiveActivities").textContent = `${summary.activeActivityCount} / ${summary.activityCount}`;
+  $("#clientUpdatedTotal").textContent = formatMoney(summary.updatedTotal || 0);
+  $("#clientNotExecuted").textContent = formatMoney(summary.notExecutedTotal || 0);
+  $("#clientAlerts").textContent = activePending().length;
+
+  $("#clientActas").innerHTML = actas
+    .map((acta) => {
+      const width = Math.max((acta.value / maxActa) * 100, 4);
+      return `
+        <button class="client-acta" data-acta="${acta.name}">
+          <span>${acta.name.replace("ACTA DE OBRA ", "Acta ")}</span>
+          <strong>${formatMoney(acta.value)}</strong>
+          <i style="width:${width}%"></i>
+        </button>
+      `;
+    })
+    .join("");
+
+  $("#clientChapters").innerHTML = chapters
+    .map((chapter, index) => `
+      <button class="client-front" data-chapter-index="${index}">
+        <span>${chapter.name}</span>
+        <strong>${formatMoney(chapter.executed)}</strong>
+        <small>${chapter.active} actividades · ${formatPercent(chapter.progress)}</small>
+      </button>
+    `)
+    .join("");
+
+  document.querySelectorAll(".client-acta").forEach((button) => {
+    button.addEventListener("click", () => {
+      const acta = actas.find((item) => item.name === button.dataset.acta);
+      openInspector(acta.name, "Resumen ejecutivo del corte de obra.", [
+        ["Valor directo", formatMoney(acta.value)],
+        ["Actividades", acta.items],
+        ["Registros", acta.movements],
+        ["Cantidad reportada", number.format(acta.quantity)],
+      ]);
+    });
+  });
+
+  document.querySelectorAll(".client-front").forEach((button) => {
+    button.addEventListener("click", () => {
+      const chapter = chapters[Number(button.dataset.chapterIndex)];
+      openInspector(chapter.name, "Frente de obra con avance valorizado acumulado.", [
+        ["Ejecutado directo", formatMoney(chapter.executed)],
+        ["Presupuesto directo", formatMoney(chapter.budget)],
+        ["Avance", formatPercent(chapter.progress)],
+        ["Actividades con avance", chapter.active],
+      ]);
+    });
+  });
+
+  document.querySelectorAll("[data-client-action]").forEach((button) => {
+    button.onclick = () => {
+      const action = button.dataset.clientAction;
+      const copy = {
+        "scope-updated": [
+          "Presupuesto actualizado directo",
+          "Valor directo resultante de cantidades actualizadas dentro de la hoja de cortes.",
+          formatMoney(summary.updatedTotal || 0),
+        ],
+        "scope-not-executed": [
+          "No ejecutado directo",
+          "Valor directo identificado como no ejecutado en la lectura actual del archivo.",
+          formatMoney(summary.notExecutedTotal || 0),
+        ],
+        "scope-alerts": [
+          "Alertas internas",
+          "Señales de control que conviene resolver antes de presentar una versión formal al cliente.",
+          `${activePending().length} alertas activas`,
+        ],
+      }[action];
+      openInspector(copy[0], copy[1], [
+        ["Valor", copy[2]],
+        ["Fuente", `${project.sourceWorkbook} · ${project.sourceSheet || "CORTES_OBRA"}`],
+      ]);
+    };
+  });
+}
+
 function renderActivities() {
   const rows = filteredActivities()
     .sort((a, b) => b.executedValue - a.executedValue)
@@ -466,6 +560,7 @@ function renderTrace() {
 }
 
 function renderAll() {
+  renderClient();
   renderSummary();
   renderChapterBars();
   renderActas();

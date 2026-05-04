@@ -18,6 +18,7 @@
           </div>
         </div>
         <nav class="nav">
+          <button class="nav-item" data-section="client">Cliente</button>
           <button class="nav-item active" data-section="overview">Resumen</button>
           <button class="nav-item" data-section="actas">Actas</button>
           <button class="nav-item" data-section="activities">Actividades</button>
@@ -46,6 +47,84 @@
             </select>
           </div>
         </header>
+
+        <section class="section client-section" id="client">
+          <div class="client-hero">
+            <div>
+              <p class="eyebrow">Informe vivo para cliente</p>
+              <h2>Torre Laguna</h2>
+              <p id="clientFreshness">Cargando corte actual...</p>
+            </div>
+            <div class="client-progress">
+              <span id="clientProgressValue">0%</span>
+              <small>Avance valorizado</small>
+            </div>
+          </div>
+
+          <div class="client-kpis">
+            <div>
+              <span>Contrato estimado</span>
+              <strong id="clientContractTotal">$0</strong>
+            </div>
+            <div>
+              <span>Ejecutado a corte</span>
+              <strong id="clientExecutedTotal">$0</strong>
+            </div>
+            <div>
+              <span>Saldo por ejecutar</span>
+              <strong id="clientBalanceTotal">$0</strong>
+            </div>
+            <div>
+              <span>Actividades con avance</span>
+              <strong id="clientActiveActivities">0</strong>
+            </div>
+          </div>
+
+          <div class="client-grid">
+            <section class="client-block">
+              <div class="panel-heading">
+                <div>
+                  <h2>Actas de avance</h2>
+                  <p>Valor ejecutado por corte de obra.</p>
+                </div>
+              </div>
+              <div id="clientActas" class="client-timeline"></div>
+            </section>
+
+            <section class="client-block">
+              <div class="panel-heading">
+                <div>
+                  <h2>Frentes principales</h2>
+                  <p>Capítulos con mayor avance valorizado.</p>
+                </div>
+              </div>
+              <div id="clientChapters" class="client-fronts"></div>
+            </section>
+          </div>
+
+          <section class="client-block client-scope">
+            <div class="panel-heading">
+              <div>
+                <h2>Alcance y decisiones</h2>
+                <p>Señales resumidas para revisar costo, alcance y cambios antes de comité.</p>
+              </div>
+            </div>
+            <div class="scope-strip">
+              <button class="scope-item" data-client-action="scope-updated">
+                <span>Presupuesto actualizado directo</span>
+                <strong id="clientUpdatedTotal">$0</strong>
+              </button>
+              <button class="scope-item" data-client-action="scope-not-executed">
+                <span>No ejecutado directo</span>
+                <strong id="clientNotExecuted">$0</strong>
+              </button>
+              <button class="scope-item" data-client-action="scope-alerts">
+                <span>Alertas internas</span>
+                <strong id="clientAlerts">0</strong>
+              </button>
+            </div>
+          </section>
+        </section>
 
         <section class="section active" id="overview">
           <div class="signal-strip">
