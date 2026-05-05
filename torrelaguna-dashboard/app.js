@@ -1,5 +1,8 @@
 const state = {
   data: null,
+  catalog: null,
+  catalogPool: [],
+  catalogStatus: "loading",
   section: "overview",
   query: "",
   acta: "all",
@@ -26,8 +29,9 @@ const LEGACY_DECISION_KEY = "torrelaguna-field-alert-decisions";
 const DECISION_KEY_PREFIX = "obra-control-local-decisions";
 const MOVEMENT_KEY_PREFIX = "obra-control-local-movements";
 const DEFAULT_DATA_URL = "./data/torrelaguna.json";
+const DEFAULT_CATALOG_URL = "./data/apu_catalog.json";
 const PACKAGE_SCHEMA_VERSION = "obra-control.v0.3";
-const DASHBOARD_BUILD = "20260505-sprint5-brand";
+const DASHBOARD_BUILD = "20260505-sprint6-apu-catalog";
 const DEFAULT_UNITS = ["m2", "ml", "m", "und", "gl", "kg", "m3"];
 const DEFAULT_SOURCES = ["Medina", "Albeiro", "Grillo", "Jairo", "Visita de obra", "Memoria de obra", "Foto soporte"];
 const ENTRY_TEMPLATES = [
@@ -90,6 +94,15 @@ function tokensFor(text) {
 function truncate(text, limit = 150) {
   const value = String(text || "");
   return value.length > limit ? `${value.slice(0, limit - 1).trim()}...` : value;
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function matchesQuery(...values) {
@@ -535,6 +548,84 @@ function suggestedActivities() {
   return [...state.data.activities].sort((a, b) => b.budgetValue - a.budgetValue).slice(0, 8);
 }
 
+function catalogPools() {
+  return state.catalogPool || [];
+}
+
+function scoreCatalogItem(item, entry) {
+  const queryTokens = tokensFor(entry.description);
+  const unit = normalizeLoose(entry.unit);
+  const text = normalizeLoose([
+    item.code,
+    item.description,
+    item.category,
+    item.subcategory,
+    item.unit,
+  ].join(" "));
+  const overlap = queryTokens.filter((token) => text.includes(token));
+  const overlapScore = queryTokens.length ? (overlap.length / queryTokens.length) * 60 : 0;
+  const phrase = normalizeLoose(entry.description);
+  const phraseScore = phrase && text.includes(phrase.slice(0, 24)) ? 18 : 0;
+  const unitScore = unit && normalizeLoose(item.unit) === unit ? 12 : unit ? -6 : 0;
+  const memoryScore =
+    item.catalogKind === "apu"
+      ? Math.min(Number(item.linesCount || 0), 18)
+      : Math.min(Math.log10(Number(item.frequency || 1) + 1) * 12, 18);
+
+  return Math.max(0, Math.min(99, Math.round(overlapScore + phraseScore + unitScore + memoryScore)));
+}
+
+function catalogSuggestions(entry = entryValues()) {
+  if (!state.catalog) return [];
+  const hasQuery = Boolean(entry.description || entry.unit);
+  const pool = catalogPools();
+  if (!hasQuery) {
+    return [
+      ...(state.catalog.activities || [])
+        .map((item, index) => ({ ...item, catalogKind: "apu", catalogIndex: index }))
+        .filter((item) => item.linesCount > 6)
+        .sort((a, b) => (b.linesCount || 0) - (a.linesCount || 0))
+        .slice(0, 5)
+        .map((item) => ({ item, score: 0 })),
+      ...(state.catalog.historicalItems || [])
+        .map((item, index) => ({ ...item, catalogKind: "historial", catalogIndex: index }))
+        .slice(0, 3)
+        .map((item) => ({ item, score: 0 })),
+    ];
+  }
+  return pool
+    .map((item) => ({ item, score: scoreCatalogItem(item, entry) }))
+    .filter((match) => match.score > 16)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+}
+
+function catalogCandidateSnapshot(entry = entryValues()) {
+  return catalogSuggestions(entry).slice(0, 4).map(({ item, score }) => ({
+    kind: item.catalogKind,
+    code: item.code || "",
+    description: item.description,
+    unit: item.unit,
+    category: item.category || "",
+    score,
+  }));
+}
+
+function applyCatalogSuggestion(kind, index) {
+  const source = kind === "apu" ? state.catalog?.activities : state.catalog?.historicalItems;
+  const item = source?.[Number(index)];
+  if (!item) return;
+  $("#entryDescription").value = item.description || "";
+  $("#entryUnit").value = item.unit || "";
+  $("#entryNote").value = kind === "apu"
+    ? `Sugerido por APU Machine: ${item.code || "sin código"} · ${item.category || "sin categoría"}`
+    : `Sugerido por histórico APU Machine: frecuencia ${item.frequency || 1}`;
+  state.selectedMatchRow = null;
+  autoSelectClearMatch();
+  renderIngestion();
+  $("#entryQuantity")?.focus();
+}
+
 function applyActivitySuggestion(row) {
   const activity = state.data.activities.find((item) => String(item.row) === String(row));
   if (!activity) return;
@@ -707,6 +798,7 @@ function processQuickLines() {
       lineNumber: index + 1,
       reviewReason,
       candidates: candidateSnapshot(suggestions),
+      apuCandidates: catalogCandidateSnapshot(entry),
     });
   });
 
@@ -836,6 +928,7 @@ function createMovement(forcePending = false) {
   const status = movementStatus(activity, entry, forcePending);
   const movement = movementFromEntry(entry, activity, status, {
     candidates: candidateSnapshot(matchSuggestions(entry)),
+    apuCandidates: catalogCandidateSnapshot(entry),
   });
 
   state.movements.unshift(movement);
@@ -1096,6 +1189,48 @@ function renderEntryAssist() {
   });
 }
 
+function renderApuAssist(entry = entryValues()) {
+  const target = $("#apuAssist");
+  const meta = $("#apuCatalogMeta");
+  if (!target || !meta) return;
+
+  if (state.catalogStatus === "unavailable") {
+    meta.textContent = "Catálogo no disponible en esta publicación.";
+    target.innerHTML = `<p class="empty">El ingreso sigue funcionando con la matriz del proyecto.</p>`;
+    return;
+  }
+
+  const counts = state.catalog?.counts;
+  meta.textContent = counts
+    ? `${number.format(counts.apuActivities)} actividades APU · ${number.format(counts.historicalUniqueItems)} conceptos históricos únicos.`
+    : "Cargando catálogo histórico...";
+
+  const suggestions = catalogSuggestions(entry);
+  target.innerHTML = suggestions.length
+    ? suggestions
+        .map(({ item, score }) => {
+          const kindLabel = item.catalogKind === "apu" ? "APU" : "Histórico";
+          const price = item.unitPrice || item.avgUnitPrice;
+          const support = item.catalogKind === "apu"
+            ? `${item.category || "Sin categoría"}${item.subcategory ? ` · ${item.subcategory}` : ""}`
+            : `${number.format(item.frequency || 1)} apariciones · ${(item.sourceGroups || "").split(",").slice(0, 2).join(", ")}`;
+          const confidence = score ? `${matchConfidence(score)} · ${score}%` : "Sugerencia frecuente";
+          return `
+            <button type="button" data-catalog-kind="${item.catalogKind}" data-catalog-index="${item.catalogIndex}">
+              <span>${escapeHtml(kindLabel)} · ${escapeHtml(item.unit || "s/u")}</span>
+              <strong>${escapeHtml(truncate(item.description, 118))}</strong>
+              <small>${escapeHtml(support)} · ${escapeHtml(confidence)}${price ? ` · ${formatMoney(price)}` : ""}</small>
+            </button>
+          `;
+        })
+        .join("")
+    : `<p class="empty">Sin coincidencias históricas. El movimiento queda como aprendizaje para depurar el catálogo.</p>`;
+
+  document.querySelectorAll("[data-catalog-kind]").forEach((button) => {
+    button.addEventListener("click", () => applyCatalogSuggestion(button.dataset.catalogKind, button.dataset.catalogIndex));
+  });
+}
+
 function renderIngestion() {
   if (!$("#entryForm")) return;
   const entry = entryValues();
@@ -1113,6 +1248,7 @@ function renderIngestion() {
   $("#ingestPendingCount").textContent = pendingCount;
   $("#ingestTotalValue").textContent = formatMoney(total);
   renderEntryAssist();
+  renderApuAssist(entry);
   renderMovementBuckets();
 
   if (activity) {
@@ -1191,6 +1327,7 @@ function renderIngestion() {
         ["Revisión", movement.reviewReason || "Sin alerta adicional"],
         ["Feedback arquitecto", movementFeedbackLabel(movement.architectFeedback)],
         ["Candidatos", movement.candidates?.map((candidate) => `${candidate.item} (${candidate.score}%): ${candidate.description}`).join(" | ")],
+        ["Memoria APU", movement.apuCandidates?.map((candidate) => `${candidate.kind} ${candidate.code || ""} (${candidate.score}%): ${candidate.description}`).join(" | ")],
       ], movementActions(movement));
     });
   });
@@ -1457,6 +1594,7 @@ function buildHandoffPackage() {
     source: {
       workbook: state.data.project.sourceWorkbook,
       sheet: state.data.project.sourceSheet,
+      apuCatalog: state.catalog?.counts || null,
       note: "Paquete generado desde prototipo estático. No modifica el Excel fuente.",
     },
     counts,
@@ -1719,11 +1857,32 @@ function populateFilters() {
   });
 }
 
+async function loadCatalog() {
+  const catalogParam = new URLSearchParams(location.search).get("catalog");
+  const catalogUrl = catalogParam && !/^https?:\/\//i.test(catalogParam) ? catalogParam : DEFAULT_CATALOG_URL;
+  try {
+    const response = await fetch(catalogUrl);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    state.catalog = await response.json();
+    state.catalogPool = [
+      ...(state.catalog.activities || []).map((item, index) => ({ ...item, catalogKind: "apu", catalogIndex: index })),
+      ...(state.catalog.historicalItems || []).map((item, index) => ({ ...item, catalogKind: "historial", catalogIndex: index })),
+    ];
+    state.catalogStatus = "ready";
+  } catch (error) {
+    state.catalog = null;
+    state.catalogPool = [];
+    state.catalogStatus = "unavailable";
+    console.warn("APU catalog unavailable", error);
+  }
+}
+
 async function boot() {
   const dataParam = new URLSearchParams(location.search).get("data");
   const dataUrl = dataParam && !/^https?:\/\//i.test(dataParam) ? dataParam : DEFAULT_DATA_URL;
   const response = await fetch(dataUrl);
   state.data = await response.json();
+  await loadCatalog();
   loadDecisions();
   loadMovements();
   populateFilters();

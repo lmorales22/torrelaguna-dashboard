@@ -738,6 +738,61 @@ select {
   line-height: 1.28;
 }
 
+.apu-assist {
+  margin-bottom: 26px;
+  padding: 20px 0 24px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.apu-assist .panel-heading {
+  margin-bottom: 14px;
+}
+
+.apu-assist-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.apu-assist-list button {
+  appearance: none;
+  min-height: 104px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.apu-assist-list button:hover {
+  border-color: var(--accent);
+  background: #f9fbf8;
+  transform: translateY(-1px);
+}
+
+.apu-assist-list span,
+.apu-assist-list small,
+.apu-assist-list strong {
+  display: block;
+}
+
+.apu-assist-list span,
+.apu-assist-list small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.28;
+}
+
+.apu-assist-list strong {
+  margin: 6px 0;
+  font-size: 13px;
+  line-height: 1.22;
+}
+
 .ingest-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
@@ -1506,6 +1561,7 @@ tbody tr {
   .ingest-layout,
   .quick-capture,
   .intake-assist,
+  .apu-assist-list,
   .form-grid,
   .scope-strip,
   .split-values,

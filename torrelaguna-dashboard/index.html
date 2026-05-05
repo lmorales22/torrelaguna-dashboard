@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dashboard de obra</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260505-sprint5-brand" />
+    <link rel="stylesheet" href="./styles.css?v=20260505-sprint6-apu-catalog" />
   </head>
   <body>
     <div class="app-shell">
@@ -254,6 +254,16 @@
             </div>
           </section>
 
+          <section class="apu-assist">
+            <div class="panel-heading">
+              <div>
+                <h2>Memoria APU</h2>
+                <p id="apuCatalogMeta">Cargando catálogo histórico...</p>
+              </div>
+            </div>
+            <div id="apuAssist" class="apu-assist-list"></div>
+          </section>
+
           <div class="ingest-layout">
             <form class="entry-form" id="entryForm">
               <div class="form-head">
@@ -333,8 +343,8 @@
               </div>
               <div id="matchSuggestions" class="match-list"></div>
               <div class="apu-note">
-                <span>Fuente futura</span>
-                <strong>APU Machine detecta 746 actividades y 89.440 ítems históricos, pero no se publica aquí sin depuración.</strong>
+                <span>Memoria activa</span>
+                <strong>APU Machine alimenta autocompletado y sugerencias sin cargar automáticamente contra la matriz.</strong>
               </div>
             </section>
           </div>
@@ -456,6 +466,6 @@
       </aside>
     </div>
 
-    <script src="./app.js?v=20260505-sprint5-brand"></script>
+    <script src="./app.js?v=20260505-sprint6-apu-catalog"></script>
   </body>
 </html>
