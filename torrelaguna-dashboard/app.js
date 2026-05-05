@@ -6,6 +6,8 @@ const state = {
   activityStatus: "all",
   pendingStatus: "all",
   decisions: {},
+  movements: [],
+  selectedMatchRow: null,
 };
 
 const money = new Intl.NumberFormat("es-CO", {
@@ -20,6 +22,29 @@ const number = new Intl.NumberFormat("es-CO", {
 
 const $ = (selector) => document.querySelector(selector);
 const DECISION_KEY = "torrelaguna-field-alert-decisions";
+const MOVEMENT_KEY_PREFIX = "obra-control-local-movements";
+const STOP_WORDS = new Set([
+  "con",
+  "para",
+  "por",
+  "sin",
+  "del",
+  "los",
+  "las",
+  "una",
+  "uno",
+  "incluye",
+  "suministro",
+  "instalacion",
+  "instalación",
+  "actividad",
+  "obra",
+  "tipo",
+  "en",
+  "de",
+  "y",
+  "o",
+]);
 
 function formatMoney(value) {
   return money.format(Math.round(value || 0));
@@ -31,6 +56,22 @@ function formatPercent(value) {
 
 function normalize(text) {
   return String(text || "").toLowerCase();
+}
+
+function normalizeLoose(text) {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokensFor(text) {
+  return normalizeLoose(text)
+    .split(" ")
+    .filter((token) => token.length > 2 && !STOP_WORDS.has(token));
 }
 
 function truncate(text, limit = 150) {
@@ -66,6 +107,23 @@ function loadDecisions() {
 
 function saveDecisions() {
   localStorage.setItem(DECISION_KEY, JSON.stringify(state.decisions));
+}
+
+function movementStorageKey() {
+  const projectName = normalizeLoose(state.data?.project?.name || "obra");
+  return `${MOVEMENT_KEY_PREFIX}:${projectName || "obra"}`;
+}
+
+function loadMovements() {
+  try {
+    state.movements = JSON.parse(localStorage.getItem(movementStorageKey()) || "[]");
+  } catch {
+    state.movements = [];
+  }
+}
+
+function saveMovements() {
+  localStorage.setItem(movementStorageKey(), JSON.stringify(state.movements));
 }
 
 function decisionEntries() {
@@ -343,6 +401,248 @@ function renderClient() {
   });
 }
 
+function entryValues() {
+  return {
+    acta: $("#entryActa")?.value || "nuevo",
+    date: $("#entryDate")?.value || "",
+    type: $("#entryType")?.value || "avance",
+    quantity: Number($("#entryQuantity")?.value || 0),
+    unit: ($("#entryUnit")?.value || "").trim(),
+    source: ($("#entrySource")?.value || "").trim(),
+    description: ($("#entryDescription")?.value || "").trim(),
+    note: ($("#entryNote")?.value || "").trim(),
+  };
+}
+
+function scoreActivity(activity, entry) {
+  const descriptionTokens = tokensFor(entry.description);
+  const unit = normalizeLoose(entry.unit);
+  if (!descriptionTokens.length && !unit) return 0;
+
+  const activityText = normalizeLoose([
+    activity.item,
+    activity.description,
+    activity.chapter,
+    activity.unit,
+  ].join(" "));
+  const activityDescription = normalizeLoose(activity.description);
+  const overlap = descriptionTokens.filter((token) => activityText.includes(token));
+  const overlapScore = descriptionTokens.length ? (overlap.length / descriptionTokens.length) * 62 : 0;
+  const phraseScore =
+    entry.description && activityDescription.includes(normalizeLoose(entry.description).slice(0, 28))
+      ? 15
+      : 0;
+  const itemScore = normalizeLoose(entry.description).includes(normalizeLoose(activity.item)) ? 18 : 0;
+  const unitScore = unit && normalizeLoose(activity.unit) === unit ? 14 : unit ? -10 : 0;
+  const chapterScore = overlap.some((token) => normalizeLoose(activity.chapter).includes(token)) ? 8 : 0;
+
+  return Math.max(0, Math.min(99, Math.round(overlapScore + phraseScore + itemScore + unitScore + chapterScore)));
+}
+
+function matchConfidence(score) {
+  if (score >= 70) return "Alta";
+  if (score >= 45) return "Media";
+  return "Baja";
+}
+
+function matchSuggestions(entry) {
+  return state.data.activities
+    .map((activity) => ({ activity, score: scoreActivity(activity, entry) }))
+    .filter((match) => match.score > 18)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 7);
+}
+
+function selectedActivity() {
+  if (!state.selectedMatchRow) return null;
+  return state.data.activities.find((activity) => String(activity.row) === String(state.selectedMatchRow));
+}
+
+function selectedUnitMismatch(activity, entry) {
+  return Boolean(activity && entry.unit && normalizeLoose(activity.unit) !== normalizeLoose(entry.unit));
+}
+
+function movementStatus(activity, entry, forcePending = false) {
+  if (forcePending) return entry.type === "adicional" ? "ADICIONAL_PENDIENTE_APU" : "PENDIENTE_REVISION";
+  if (!activity) return entry.type === "adicional" ? "ADICIONAL_PENDIENTE_APU" : "PENDIENTE_REVISION";
+  if (selectedUnitMismatch(activity, entry)) return "REVISAR_UNIDAD";
+  return "CONFIRMADO";
+}
+
+function movementValue(activity, entry) {
+  if (!activity || !entry.quantity) return 0;
+  const sign = entry.type === "no_ejecutado" ? -1 : 1;
+  return sign * entry.quantity * (activity.unitPrice || 0);
+}
+
+function createMovement(forcePending = false) {
+  const entry = entryValues();
+  const activity = forcePending ? selectedActivity() : selectedActivity();
+  if (!entry.description && !entry.source && !activity) {
+    openInspector("Movimiento incompleto", "Agrega una actividad reportada, una fuente o selecciona un ítem antes de guardar.", [
+      ["Estado", "No guardado"],
+    ]);
+    return;
+  }
+  if (!forcePending && !activity) {
+    openInspector("Confirma el destino", "La app no carga una cantidad contra la matriz si el arquitecto no confirma el ítem destino.", [
+      ["Actividad reportada", entry.description || "Sin descripción"],
+      ["Acción sugerida", "Selecciona una coincidencia o guarda como pendiente."],
+    ]);
+    return;
+  }
+
+  const status = movementStatus(activity, entry, forcePending);
+  const movement = {
+    id: `mov-${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    project: state.data.project.name,
+    acta: entry.acta === "nuevo" ? `Corte ${entry.date || "sin fecha"}` : entry.acta,
+    date: entry.date,
+    type: entry.type,
+    reportedDescription: entry.description,
+    quantity: entry.quantity,
+    unit: entry.unit,
+    source: entry.source,
+    note: entry.note,
+    status,
+    activity: activity
+      ? {
+          row: activity.row,
+          item: activity.item,
+          description: activity.description,
+          chapter: activity.chapter,
+          unit: activity.unit,
+          unitPrice: activity.unitPrice,
+        }
+      : null,
+    simulatedValue: movementValue(activity, entry),
+  };
+
+  state.movements.unshift(movement);
+  saveMovements();
+  state.selectedMatchRow = null;
+  $("#entryForm").reset();
+  setDefaultEntryDate();
+  renderIngestion();
+  openInspector(status, movement.reportedDescription || movement.activity?.description || "Movimiento guardado.", [
+    ["Acta", movement.acta],
+    ["Cantidad", `${number.format(movement.quantity)} ${movement.unit || ""}`],
+    ["Ítem destino", movement.activity ? `${movement.activity.item} · ${movement.activity.description}` : "Pendiente"],
+    ["Valor simulado", formatMoney(movement.simulatedValue)],
+    ["Fuente", movement.source || "Sin fuente"],
+  ]);
+}
+
+function setDefaultEntryDate() {
+  const input = $("#entryDate");
+  if (input && !input.value) {
+    const localDate = new Date();
+    localDate.setMinutes(localDate.getMinutes() - localDate.getTimezoneOffset());
+    input.value = localDate.toISOString().slice(0, 10);
+  }
+}
+
+function statusLabel(status) {
+  return {
+    CONFIRMADO: "Confirmado",
+    REVISAR_UNIDAD: "Revisar unidad",
+    PENDIENTE_REVISION: "Pendiente",
+    ADICIONAL_PENDIENTE_APU: "Adicional",
+  }[status] || status;
+}
+
+function movementStatusClass(status) {
+  if (status === "CONFIRMADO") return "ok";
+  if (status === "REVISAR_UNIDAD" || status === "ADICIONAL_PENDIENTE_APU") return "warn";
+  return "danger";
+}
+
+function renderIngestion() {
+  if (!$("#entryForm")) return;
+  const entry = entryValues();
+  const suggestions = matchSuggestions(entry);
+  const activity = selectedActivity();
+  const pendingCount = state.movements.filter((movement) => movement.status !== "CONFIRMADO").length;
+  const total = state.movements.reduce((sum, movement) => sum + (movement.simulatedValue || 0), 0);
+
+  $("#ingestCount").textContent = state.movements.length;
+  $("#ingestPendingCount").textContent = pendingCount;
+  $("#ingestTotalValue").textContent = formatMoney(total);
+
+  if (activity) {
+    const unitMismatch = selectedUnitMismatch(activity, entry);
+    $("#entryMatchState").textContent = unitMismatch ? "Revisar unidad" : "Ítem confirmado";
+    $("#entryMatchState").className = `status-pill ${unitMismatch ? "warn" : "ok"}`;
+    $("#selectedMatch").innerHTML = `
+      <span>Ítem destino</span>
+      <strong>${activity.item} · ${activity.description}</strong>
+      <small>${activity.chapter} · ${activity.unit} · ${formatMoney(activity.unitPrice)}</small>
+    `;
+  } else {
+    $("#entryMatchState").textContent = entry.type === "adicional" ? "Adicional" : "Sin selección";
+    $("#entryMatchState").className = `status-pill ${entry.type === "adicional" ? "warn" : ""}`;
+    $("#selectedMatch").innerHTML = `
+      <span>Ítem destino</span>
+      <strong>Selecciona una sugerencia para poder guardar como confirmado.</strong>
+    `;
+  }
+
+  $("#matchSuggestions").innerHTML =
+    suggestions.length
+      ? suggestions
+          .map(({ activity: item, score }) => `
+            <button class="match-option ${String(item.row) === String(state.selectedMatchRow) ? "selected" : ""}" data-row="${item.row}">
+              <span>${item.item} · ${item.unit}</span>
+              <strong>${item.description}</strong>
+              <small>${item.chapter} · ${matchConfidence(score)} coincidencia · ${score}%</small>
+            </button>
+          `)
+          .join("")
+      : `<p class="empty">Escribe una actividad de campo para ver coincidencias contra la matriz.</p>`;
+
+  document.querySelectorAll(".match-option").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedMatchRow = button.dataset.row;
+      renderIngestion();
+    });
+  });
+
+  $("#movementLedger").innerHTML =
+    state.movements.length
+      ? state.movements
+          .map((movement) => `
+            <article class="movement-row" data-movement="${movement.id}">
+              <div>
+                <strong>${movement.activity ? `${movement.activity.item} · ${truncate(movement.activity.description, 86)}` : truncate(movement.reportedDescription || "Sin actividad", 92)}</strong>
+                <span class="row-meta">${movement.acta} · ${movement.source || "Sin fuente"} · ${movement.date || "sin fecha"}</span>
+              </div>
+              <div>
+                <strong>${number.format(movement.quantity)} ${movement.unit || ""}</strong>
+                <span class="row-meta">${movement.type} · ${formatMoney(movement.simulatedValue)}</span>
+              </div>
+              <span class="status-pill ${movementStatusClass(movement.status)}">${statusLabel(movement.status)}</span>
+            </article>
+          `)
+          .join("")
+      : `<p class="empty">Aún no hay movimientos guardados en esta sesión.</p>`;
+
+  document.querySelectorAll(".movement-row").forEach((row) => {
+    row.addEventListener("click", () => {
+      const movement = state.movements.find((item) => item.id === row.dataset.movement);
+      openInspector(statusLabel(movement.status), movement.reportedDescription || movement.activity?.description || "Movimiento de corte.", [
+        ["Acta", movement.acta],
+        ["Tipo", movement.type],
+        ["Cantidad", `${number.format(movement.quantity)} ${movement.unit || ""}`],
+        ["Ítem destino", movement.activity ? `${movement.activity.item} · ${movement.activity.description}` : "Pendiente"],
+        ["Valor simulado", formatMoney(movement.simulatedValue)],
+        ["Fuente", movement.source || "Sin fuente"],
+        ["Observación", movement.note || "Sin observación"],
+      ]);
+    });
+  });
+}
+
 function renderActivities() {
   const rows = filteredActivities()
     .sort((a, b) => b.executedValue - a.executedValue)
@@ -516,11 +816,37 @@ function exportDecisions() {
   URL.revokeObjectURL(url);
 }
 
+function exportMovements() {
+  const payload = {
+    project: state.data.project,
+    exportedAt: new Date().toISOString(),
+    note: "Prototipo de ingreso. No modifica el Excel fuente.",
+    movements: state.movements,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "obra-movimientos-corte-prototipo.json";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function clearDecisions() {
   state.decisions = {};
   saveDecisions();
   renderAll();
   closeInspector();
+}
+
+function clearMovements() {
+  state.movements = [];
+  state.selectedMatchRow = null;
+  saveMovements();
+  renderIngestion();
+  openInspector("Movimientos locales vaciados", "La maqueta de ingreso quedó limpia en este navegador.", [
+    ["Excel fuente", "Sin cambios"],
+  ]);
 }
 
 function renderTrace() {
@@ -561,6 +887,7 @@ function renderTrace() {
 
 function renderAll() {
   renderClient();
+  renderIngestion();
   renderSummary();
   renderChapterBars();
   renderActas();
@@ -592,6 +919,35 @@ function bindEvents() {
   $("#inspectorClose").addEventListener("click", closeInspector);
   $("#exportDecisions").addEventListener("click", exportDecisions);
   $("#clearDecisions").addEventListener("click", clearDecisions);
+  $("#exportMovements")?.addEventListener("click", exportMovements);
+  $("#clearMovements")?.addEventListener("click", clearMovements);
+
+  $("#entryForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    createMovement(false);
+  });
+  $("#saveAsPending")?.addEventListener("click", () => createMovement(true));
+  $("#entryForm")?.addEventListener("reset", () => {
+    window.setTimeout(() => {
+      state.selectedMatchRow = null;
+      setDefaultEntryDate();
+      renderIngestion();
+    }, 0);
+  });
+
+  [
+    "#entryActa",
+    "#entryDate",
+    "#entryType",
+    "#entryQuantity",
+    "#entryUnit",
+    "#entrySource",
+    "#entryDescription",
+    "#entryNote",
+  ].forEach((selector) => {
+    $(selector)?.addEventListener("input", renderIngestion);
+    $(selector)?.addEventListener("change", renderIngestion);
+  });
 
   $("#searchInput").addEventListener("input", (event) => {
     state.query = normalize(event.target.value);
@@ -628,11 +984,13 @@ function bindEvents() {
 
 function populateFilters() {
   const select = $("#actaFilter");
+  const entryActa = $("#entryActa");
   state.data.actas.forEach((acta) => {
     const option = document.createElement("option");
     option.value = acta.name;
     option.textContent = acta.name;
     select.append(option);
+    entryActa?.append(option.cloneNode(true));
   });
 }
 
@@ -640,8 +998,10 @@ async function boot() {
   const response = await fetch("./data/torrelaguna.json");
   state.data = await response.json();
   loadDecisions();
+  loadMovements();
   populateFilters();
   bindEvents();
+  setDefaultEntryDate();
   renderAll();
   const initialSection = location.hash.replace("#", "");
   if (initialSection && document.getElementById(initialSection)) {

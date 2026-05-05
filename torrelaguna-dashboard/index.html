@@ -20,6 +20,7 @@
         <nav class="nav">
           <button class="nav-item" data-section="client">Cliente</button>
           <button class="nav-item active" data-section="overview">Resumen</button>
+          <button class="nav-item" data-section="ingest">Ingreso</button>
           <button class="nav-item" data-section="actas">Actas</button>
           <button class="nav-item" data-section="activities">Actividades</button>
           <button class="nav-item" data-section="pending">Alertas</button>
@@ -203,6 +204,123 @@
               <div id="chapterBars" class="bar-list"></div>
             </section>
           </div>
+        </section>
+
+        <section class="section ingest-section" id="ingest">
+          <div class="section-title">
+            <h2>Ingreso de corte</h2>
+            <p>Captura controlada de cantidades antes de escribirlas en una matriz contractual.</p>
+          </div>
+
+          <div class="ingest-status">
+            <div>
+              <span>Movimientos locales</span>
+              <strong id="ingestCount">0</strong>
+            </div>
+            <div>
+              <span>Pendientes de decisión</span>
+              <strong id="ingestPendingCount">0</strong>
+            </div>
+            <div>
+              <span>Valor simulado</span>
+              <strong id="ingestTotalValue">$0</strong>
+            </div>
+          </div>
+
+          <div class="ingest-layout">
+            <form class="entry-form" id="entryForm">
+              <div class="form-head">
+                <div>
+                  <h2>Nuevo movimiento</h2>
+                  <p>Registra cantidad, fuente y destino presupuestal. La coincidencia requiere confirmación humana.</p>
+                </div>
+                <span id="entryMatchState" class="status-pill warn">Sin selección</span>
+              </div>
+
+              <div class="form-grid">
+                <label>
+                  <span>Corte / acta</span>
+                  <select id="entryActa">
+                    <option value="nuevo">Nuevo corte</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Fecha</span>
+                  <input id="entryDate" type="date" />
+                </label>
+                <label>
+                  <span>Tipo</span>
+                  <select id="entryType">
+                    <option value="avance">Avance</option>
+                    <option value="correccion">Corrección</option>
+                    <option value="adicional">Adicional</option>
+                    <option value="no_ejecutado">No ejecutado</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Cantidad</span>
+                  <input id="entryQuantity" type="number" step="0.01" min="0" placeholder="23.5" />
+                </label>
+                <label>
+                  <span>Unidad reportada</span>
+                  <input id="entryUnit" type="text" placeholder="m2, ml, und..." />
+                </label>
+                <label>
+                  <span>Fuente / procedencia</span>
+                  <input id="entrySource" type="text" placeholder="Medina, visita, memoria, foto..." />
+                </label>
+              </div>
+
+              <label class="wide-field">
+                <span>Actividad reportada en campo</span>
+                <textarea id="entryDescription" rows="3" placeholder="Ej: suministro e instalación de mampostería en ladrillo..."></textarea>
+              </label>
+
+              <label class="wide-field">
+                <span>Observación</span>
+                <textarea id="entryNote" rows="2" placeholder="Ubicación, piso, frente, aclaración o soporte pendiente..."></textarea>
+              </label>
+
+              <div class="selected-match" id="selectedMatch">
+                <span>Ítem destino</span>
+                <strong>Selecciona una sugerencia para poder guardar como confirmado.</strong>
+              </div>
+
+              <div class="entry-actions">
+                <button type="submit">Guardar movimiento</button>
+                <button type="button" id="saveAsPending" class="secondary-button">Guardar pendiente</button>
+                <button type="reset" class="ghost-button">Limpiar</button>
+              </div>
+            </form>
+
+            <section class="match-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Sugerencias de matriz</h2>
+                  <p>Coincidencias contra las actividades de presupuesto cargadas en este proyecto.</p>
+                </div>
+              </div>
+              <div id="matchSuggestions" class="match-list"></div>
+              <div class="apu-note">
+                <span>Fuente futura</span>
+                <strong>APU Machine detecta 746 actividades y 89.440 ítems históricos, pero no se publica aquí sin depuración.</strong>
+              </div>
+            </section>
+          </div>
+
+          <section class="ledger-section">
+            <div class="panel-heading">
+              <div>
+                <h2>Bandeja de movimientos</h2>
+                <p>Datos guardados localmente en este navegador. Sirven como maqueta de ingreso, no modifican Excel.</p>
+              </div>
+              <div class="ledger-actions">
+                <button id="exportMovements" type="button">Exportar JSON</button>
+                <button id="clearMovements" type="button">Vaciar</button>
+              </div>
+            </div>
+            <div id="movementLedger" class="movement-ledger"></div>
+          </section>
         </section>
 
         <section class="section" id="actas">
