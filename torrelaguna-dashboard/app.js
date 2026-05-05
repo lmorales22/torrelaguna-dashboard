@@ -35,7 +35,7 @@ const ALIAS_KEY_PREFIX = "obra-control-alias-memory";
 const DEFAULT_DATA_URL = "./data/torrelaguna.json";
 const DEFAULT_CATALOG_URL = "./data/apu_catalog.json";
 const PACKAGE_SCHEMA_VERSION = "obra-control.v0.3";
-const DASHBOARD_BUILD = "20260505-sprint9-exportables-v3";
+const DASHBOARD_BUILD = "20260505-sprint10-client-premium-v2";
 const DEFAULT_UNITS = ["m2", "ml", "m", "und", "gl", "kg", "m3"];
 const DEFAULT_SOURCES = ["Medina", "Albeiro", "Grillo", "Jairo", "Visita de obra", "Memoria de obra", "Foto soporte"];
 const ENTRY_TEMPLATES = [
@@ -454,6 +454,12 @@ function renderClient() {
 
   $("#clientFreshness").textContent = `Corte generado desde ${project.sourceSheet || "CORTES_OBRA"} · ${project.generatedAt || project.updatedAt}`;
   $("#clientProgressValue").textContent = formatPercent(progress);
+  $(".client-progress")?.style.setProperty("--client-progress", `${Math.min(Math.max(progress * 100, 0), 100)}%`);
+  $("#clientProgressContext").textContent = "Ejecutado a corte";
+  $("#clientHeroStatus").textContent =
+    progress >= 0.75 ? "Avance alto" : progress >= 0.45 ? "Obra en ejecución" : "Corte inicial";
+  $("#clientHeroWeeks").textContent = `${weeks.length} semanas valorizadas`;
+  $("#clientHeroSource").textContent = project.sourceSheet || "CORTES_OBRA";
   $("#clientContractTotal").textContent = formatMoney(contractTotal);
   $("#clientExecutedTotal").textContent = formatMoney(executedTotal);
   $("#clientLatestWeek").textContent = formatMoney(latestWeek?.contractValue || 0);

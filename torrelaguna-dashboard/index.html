@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dashboard de obra</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260505-sprint9-exportables-v3" />
+    <link rel="stylesheet" href="./styles.css?v=20260505-sprint10-client-premium-v2" />
   </head>
   <body>
     <div class="app-shell">
@@ -56,14 +56,20 @@
 
         <section class="section client-section" id="client">
           <div class="client-hero">
-            <div>
-              <p class="eyebrow">Informe vivo para cliente</p>
+            <div class="client-hero-copy">
+              <p class="client-report-label">Informe cliente</p>
               <h2 id="clientProjectName">Cargando obra</h2>
               <p id="clientFreshness">Cargando corte actual...</p>
+              <div class="client-hero-meta">
+                <span id="clientHeroStatus">Estado del corte</span>
+                <span id="clientHeroWeeks">Semanas con avance</span>
+                <span id="clientHeroSource">Fuente controlada</span>
+              </div>
             </div>
             <div class="client-progress">
               <span id="clientProgressValue">0%</span>
               <small>Avance valorizado</small>
+              <em id="clientProgressContext">Calculando avance</em>
             </div>
           </div>
 
@@ -88,7 +94,7 @@
 
           <section class="client-brief">
             <div>
-              <span>Lectura de avance</span>
+              <span>Lectura ejecutiva</span>
               <strong id="clientBriefProgress">Cargando lectura...</strong>
             </div>
             <div>
@@ -106,7 +112,7 @@
               <div class="panel-heading">
                 <div>
                   <h2>Avance por semana</h2>
-                  <p>Lectura ejecutiva del ritmo de obra; las actas quedan como soporte técnico.</p>
+                  <p>Valor semanal y acumulado para conversación de seguimiento.</p>
                 </div>
               </div>
               <div id="clientWeeks" class="client-week-list"></div>
@@ -116,7 +122,7 @@
               <div class="panel-heading">
                 <div>
                   <h2>Ritmo y frentes</h2>
-                  <p>Semanas clave y capítulos con mayor avance valorizado.</p>
+                  <p>Señales de obra que explican dónde se está concentrando el avance.</p>
                 </div>
               </div>
               <div id="clientRhythm" class="client-rhythm"></div>
@@ -528,6 +534,6 @@
       </aside>
     </div>
 
-    <script src="./app.js?v=20260505-sprint9-exportables-v3"></script>
+    <script src="./app.js?v=20260505-sprint10-client-premium-v2"></script>
   </body>
 </html>
