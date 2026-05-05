@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Torre Laguna | Dashboard de obra</title>
+    <title>Dashboard de obra</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260505-sprint3-handoff" />
+    <link rel="stylesheet" href="./styles.css?v=20260505-sprint4-portable" />
   </head>
   <body>
     <div class="app-shell">
@@ -13,8 +13,8 @@
         <div class="brand">
           <span class="brand-mark"></span>
           <div>
-            <strong>Torre Laguna</strong>
-            <small>Cortes de campo</small>
+            <strong id="brandName">Cargando obra</strong>
+            <small id="brandSubtitle">Cortes de campo</small>
           </div>
         </div>
         <nav class="nav">
@@ -35,8 +35,8 @@
       <main class="workspace">
         <header class="topbar">
           <div>
-            <p class="eyebrow">Reforma segundo piso · Motorlaguna</p>
-            <h1>Dashboard de campo</h1>
+            <p class="eyebrow" id="projectEyebrow">Cargando proyecto</p>
+            <h1 id="workspaceTitle">Dashboard de campo</h1>
           </div>
           <div class="topbar-actions">
             <label class="search">
@@ -53,7 +53,7 @@
           <div class="client-hero">
             <div>
               <p class="eyebrow">Informe vivo para cliente</p>
-              <h2>Torre Laguna</h2>
+              <h2 id="clientProjectName">Cargando obra</h2>
               <p id="clientFreshness">Cargando corte actual...</p>
             </div>
             <div class="client-progress">
@@ -439,6 +439,6 @@
       </aside>
     </div>
 
-    <script src="./app.js?v=20260505-sprint3-handoff"></script>
+    <script src="./app.js?v=20260505-sprint4-portable"></script>
   </body>
 </html>

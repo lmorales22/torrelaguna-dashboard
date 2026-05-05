@@ -22,10 +22,12 @@ const number = new Intl.NumberFormat("es-CO", {
 });
 
 const $ = (selector) => document.querySelector(selector);
-const DECISION_KEY = "torrelaguna-field-alert-decisions";
+const LEGACY_DECISION_KEY = "torrelaguna-field-alert-decisions";
+const DECISION_KEY_PREFIX = "obra-control-local-decisions";
 const MOVEMENT_KEY_PREFIX = "obra-control-local-movements";
+const DEFAULT_DATA_URL = "./data/torrelaguna.json";
 const PACKAGE_SCHEMA_VERSION = "obra-control.v0.3";
-const DASHBOARD_BUILD = "20260505-sprint3-handoff";
+const DASHBOARD_BUILD = "20260505-sprint4-portable";
 const STOP_WORDS = new Set([
   "con",
   "para",
@@ -100,16 +102,23 @@ function isResolved(item) {
   return Boolean(decisionFor(item)?.resolved);
 }
 
+function decisionStorageKey() {
+  const projectName = normalizeLoose(state.data?.project?.name || "obra");
+  return `${DECISION_KEY_PREFIX}:${projectName || "obra"}`;
+}
+
 function loadDecisions() {
   try {
-    state.decisions = JSON.parse(localStorage.getItem(DECISION_KEY) || "{}");
+    const scoped = localStorage.getItem(decisionStorageKey());
+    const legacy = localStorage.getItem(LEGACY_DECISION_KEY);
+    state.decisions = JSON.parse(scoped || legacy || "{}");
   } catch {
     state.decisions = {};
   }
 }
 
 function saveDecisions() {
-  localStorage.setItem(DECISION_KEY, JSON.stringify(state.decisions));
+  localStorage.setItem(decisionStorageKey(), JSON.stringify(state.decisions));
 }
 
 function movementStorageKey() {
@@ -139,6 +148,29 @@ function activePending() {
 
 function resolvedPending() {
   return state.data.pending.filter((item) => isResolved(item));
+}
+
+function projectName() {
+  return state.data?.project?.name || "Obra";
+}
+
+function projectSubtitle() {
+  return state.data?.project?.subtitle || "Seguimiento de obra";
+}
+
+function projectSlug() {
+  return normalizeLoose(projectName()).replace(/\s+/g, "-") || "obra";
+}
+
+function renderProjectChrome() {
+  const project = state.data.project;
+  document.title = `${projectName()} | Dashboard de obra`;
+  $("#brandName").textContent = projectName();
+  $("#brandSubtitle").textContent = "Cortes de campo";
+  $("#projectEyebrow").textContent = projectSubtitle();
+  $("#workspaceTitle").textContent = "Dashboard de campo";
+  $("#clientProjectName").textContent = projectName();
+  $("#sourceWorkbook").textContent = `${project.sourceWorkbook} · ${project.sourceSheet || "CORTES_OBRA"}`;
 }
 
 function filteredActivities() {
@@ -240,7 +272,6 @@ function renderSummary() {
   const resolvedCount = resolvedPending().length;
   const pendingUnmatched = remainingPending.filter((item) => item.status === "SIN_COINCIDENCIA").length;
   const pendingReview = remainingPending.filter((item) => item.status === "REVISAR").length;
-  $("#sourceWorkbook").textContent = `${state.data.project.sourceWorkbook} · ${state.data.project.sourceSheet || "CORTES_OBRA"}`;
   $("#progressValue").textContent = formatPercent(summary.progress);
   $("#progressLabel").textContent = `${summary.activeActivityCount} de ${summary.activityCount} actividades con avance`;
   $("#executedValue").textContent = formatMoney(summary.executedTotal);
@@ -1283,7 +1314,7 @@ function reopenPending(item) {
 function exportDecisions() {
   const decisions = decisionEntries().map(([key, decision]) => ({ key, ...decision }));
   const payload = {
-    project: state.data.project.name,
+    project: projectName(),
     exportedAt: new Date().toISOString(),
     decisions,
   };
@@ -1291,7 +1322,7 @@ function exportDecisions() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "torrelaguna-revisiones-dashboard.json";
+  link.download = `${projectSlug()}-revisiones-dashboard.json`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -1323,7 +1354,8 @@ function buildHandoffPackage() {
     actaDrafts: draftRows(),
     localStorageKeys: {
       movements: movementStorageKey(),
-      decisions: DECISION_KEY,
+      decisions: decisionStorageKey(),
+      legacyDecisions: LEGACY_DECISION_KEY,
     },
     decisions,
     movements: state.movements,
@@ -1336,7 +1368,7 @@ function exportMovements() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "obra-control-paquete-migracion.json";
+  link.download = `${projectSlug()}-paquete-migracion.json`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -1454,6 +1486,7 @@ function renderTrace() {
 }
 
 function renderAll() {
+  renderProjectChrome();
   renderClient();
   renderIngestion();
   renderSummary();
@@ -1577,7 +1610,9 @@ function populateFilters() {
 }
 
 async function boot() {
-  const response = await fetch("./data/torrelaguna.json");
+  const dataParam = new URLSearchParams(location.search).get("data");
+  const dataUrl = dataParam && !/^https?:\/\//i.test(dataParam) ? dataParam : DEFAULT_DATA_URL;
+  const response = await fetch(dataUrl);
   state.data = await response.json();
   loadDecisions();
   loadMovements();
