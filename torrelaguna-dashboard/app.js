@@ -803,8 +803,68 @@ function duplicateMovement(id) {
   renderIngestion();
 }
 
+function movementFeedbackLabel(feedback) {
+  return {
+    correcto: "Correcto",
+    corregir_item: "Corregir ítem",
+    corregir_unidad: "Corregir unidad",
+    no_corresponde: "No corresponde",
+  }[feedback] || "Sin feedback";
+}
+
+function applyMovementFeedback(id, feedback) {
+  mutateMovement(id, (item) => {
+    const next = {
+      ...item,
+      architectFeedback: feedback,
+      feedbackAt: new Date().toISOString(),
+    };
+    if (feedback === "correcto" && item.activity && item.status !== "REVISAR_CANTIDAD") {
+      next.status = "CONFIRMADO";
+      next.reviewReason = "";
+    }
+    if (feedback === "corregir_item") {
+      next.status = "PENDIENTE_REVISION";
+      next.reviewReason = "Arquitecto solicitó corregir el ítem destino.";
+    }
+    if (feedback === "corregir_unidad") {
+      next.status = "REVISAR_UNIDAD";
+      next.reviewReason = "Arquitecto solicitó corregir la unidad.";
+    }
+    if (feedback === "no_corresponde") {
+      next.status = "PENDIENTE_REVISION";
+      next.reviewReason = "Arquitecto indicó que este movimiento no corresponde.";
+    }
+    return next;
+  });
+}
+
 function movementActions(movement) {
   const actions = [
+    {
+      id: "feedback-correct",
+      label: "Feedback: correcto",
+      kind: "secondary",
+      onClick: () => applyMovementFeedback(movement.id, "correcto"),
+    },
+    {
+      id: "feedback-item",
+      label: "Corregir ítem",
+      kind: "secondary",
+      onClick: () => applyMovementFeedback(movement.id, "corregir_item"),
+    },
+    {
+      id: "feedback-unit",
+      label: "Corregir unidad",
+      kind: "secondary",
+      onClick: () => applyMovementFeedback(movement.id, "corregir_unidad"),
+    },
+    {
+      id: "feedback-na",
+      label: "No corresponde",
+      kind: "danger",
+      onClick: () => applyMovementFeedback(movement.id, "no_corresponde"),
+    },
     {
       id: "movement-review",
       label: "Marcar para revisar",
@@ -950,7 +1010,7 @@ function renderIngestion() {
             <article class="movement-row" data-movement="${movement.id}">
               <div>
                 <strong>${movement.activity ? `${movement.activity.item} · ${truncate(movement.activity.description, 86)}` : truncate(movement.reportedDescription || "Sin actividad", 92)}</strong>
-                <span class="row-meta">${movement.acta} · ${movement.source || "Sin fuente"} · ${movement.date || "sin fecha"}${movement.reviewReason ? ` · ${movement.reviewReason}` : ""}</span>
+                <span class="row-meta">${movement.acta} · ${movement.source || "Sin fuente"} · ${movement.date || "sin fecha"}${movement.architectFeedback ? ` · Feedback: ${movementFeedbackLabel(movement.architectFeedback)}` : ""}${movement.reviewReason ? ` · ${movement.reviewReason}` : ""}</span>
               </div>
               <div>
                 <strong>${number.format(movement.quantity)} ${movement.unit || ""}</strong>
@@ -974,6 +1034,7 @@ function renderIngestion() {
         ["Fuente", movement.source || "Sin fuente"],
         ["Observación", movement.note || "Sin observación"],
         ["Revisión", movement.reviewReason || "Sin alerta adicional"],
+        ["Feedback arquitecto", movementFeedbackLabel(movement.architectFeedback)],
         ["Candidatos", movement.candidates?.map((candidate) => `${candidate.item} (${candidate.score}%): ${candidate.description}`).join(" | ")],
       ], movementActions(movement));
     });
