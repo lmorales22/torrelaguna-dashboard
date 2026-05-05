@@ -8,6 +8,7 @@ const state = {
   decisions: {},
   movements: [],
   selectedMatchRow: null,
+  movementFilter: "all",
 };
 
 const money = new Intl.NumberFormat("es-CO", {
@@ -414,30 +415,34 @@ function entryValues() {
   };
 }
 
-function parseQuickEntry(options = {}) {
-  const raw = ($("#quickEntry")?.value || "").trim();
-  if (!raw) return;
+function normalizeUnitToken(unit) {
+  return String(unit || "")
+    .toLowerCase()
+    .replace("m²", "m2")
+    .replace("m³", "m3")
+    .replace(/^un$|^u$/, "und");
+}
+
+function parseEntryText(raw) {
+  const base = entryValues();
+  const entry = { ...base, quantity: 0, unit: "", source: base.source, description: "", note: "", rawLine: raw };
   const quantityMatch = raw.match(/(-?\d+(?:[.,]\d+)?)\s*(m2|m²|m3|m³|ml|und|un|u|gl|kg|m)\b/i);
   const sourceMatch = raw.match(/\b(?:fuente|procedencia|soporte|contratista)\s*[:\-]?\s*([^,;]+)/i);
   const typeMatch = raw.match(/\b(adicional|correcci[oó]n|no ejecutado|avance)\b/i);
   let description = raw;
 
   if (quantityMatch) {
-    $("#entryQuantity").value = quantityMatch[1].replace(",", ".");
-    $("#entryUnit").value = quantityMatch[2]
-      .toLowerCase()
-      .replace("m²", "m2")
-      .replace("m³", "m3")
-      .replace(/^un$|^u$/, "und");
+    entry.quantity = Number(quantityMatch[1].replace(",", "."));
+    entry.unit = normalizeUnitToken(quantityMatch[2]);
     description = description.replace(quantityMatch[0], "");
   }
   if (sourceMatch) {
-    $("#entrySource").value = sourceMatch[1].trim();
+    entry.source = sourceMatch[1].trim();
     description = description.replace(sourceMatch[0], "");
   }
   if (typeMatch) {
     const normalizedType = normalizeLoose(typeMatch[1]);
-    $("#entryType").value =
+    entry.type =
       normalizedType.includes("adicional")
         ? "adicional"
         : normalizedType.includes("correccion")
@@ -448,8 +453,24 @@ function parseQuickEntry(options = {}) {
     description = description.replace(typeMatch[0], "");
   }
 
-  description = description.replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, "").replace(/\s+/g, " ");
-  if (description) $("#entryDescription").value = description;
+  entry.description = description.replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, "").replace(/\s+/g, " ");
+  return entry;
+}
+
+function fillEntryForm(entry) {
+  $("#entryQuantity").value = entry.quantity || "";
+  $("#entryUnit").value = entry.unit || "";
+  $("#entrySource").value = entry.source || "";
+  $("#entryType").value = entry.type || "avance";
+  $("#entryDescription").value = entry.description || "";
+  $("#entryNote").value = entry.note || "";
+}
+
+function parseQuickEntry(options = {}) {
+  const raw = ($("#quickEntry")?.value || "").trim();
+  if (!raw) return;
+  const entry = parseEntryText(raw.split(/\n+/).find((line) => line.trim()) || raw);
+  fillEntryForm(entry);
   state.selectedMatchRow = null;
   autoSelectClearMatch();
   renderIngestion();
@@ -544,6 +565,60 @@ function autoSaveClearEntry() {
   createMovement(false);
 }
 
+function processQuickLines() {
+  const lines = ($("#quickEntry")?.value || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return;
+
+  const created = lines.map((line, index) => {
+    const entry = parseEntryText(line);
+    const suggestions = matchSuggestions(entry);
+    const clear = clearMatchCandidate(entry, suggestions);
+    const activity = clear?.activity || null;
+    let status = movementStatus(activity, entry, false);
+    let reviewReason = "";
+
+    if (!entry.description || !entry.quantity || entry.quantity <= 0 || !entry.unit) {
+      status = "PENDIENTE_REVISION";
+      reviewReason = "Faltan datos mínimos para cargar sin revisión.";
+    } else if (entry.type === "adicional") {
+      status = "ADICIONAL_PENDIENTE_APU";
+      reviewReason = "Posible adicional; requiere validación de alcance/APU.";
+    } else if (!activity) {
+      status = "PENDIENTE_REVISION";
+      reviewReason = suggestions.length
+        ? "Hay candidatos, pero ninguno cumple la confianza para carga automática."
+        : "No se encontró candidato suficiente en la matriz.";
+    } else if (selectedUnitMismatch(activity, entry)) {
+      status = "REVISAR_UNIDAD";
+      reviewReason = `Unidad reportada ${entry.unit}; unidad matriz ${activity.unit}.`;
+    } else if (entry.type === "avance" && entry.quantity > Math.max(activity.balanceQty || 0, 0)) {
+      status = "REVISAR_CANTIDAD";
+      reviewReason = `Cantidad supera saldo visible (${number.format(activity.balanceQty)} ${activity.unit}).`;
+    }
+
+    return movementFromEntry(entry, activity, status, {
+      rawLine: line,
+      lineNumber: index + 1,
+      reviewReason,
+      candidates: candidateSnapshot(suggestions),
+    });
+  });
+
+  state.movements = [...created, ...state.movements];
+  saveMovements();
+  renderIngestion();
+  const confirmed = created.filter((movement) => movement.status === "CONFIRMADO").length;
+  openInspector("Líneas procesadas", "Convertí el texto pegado en movimientos locales clasificados.", [
+    ["Líneas leídas", created.length],
+    ["Confirmadas", confirmed],
+    ["Para revisar", created.length - confirmed],
+    ["Excel fuente", "Sin cambios"],
+  ]);
+}
+
 function selectedActivity() {
   if (!state.selectedMatchRow) return null;
   return state.data.activities.find((activity) => String(activity.row) === String(state.selectedMatchRow));
@@ -551,6 +626,17 @@ function selectedActivity() {
 
 function selectedUnitMismatch(activity, entry) {
   return Boolean(activity && entry.unit && normalizeLoose(activity.unit) !== normalizeLoose(entry.unit));
+}
+
+function candidateSnapshot(suggestions) {
+  return suggestions.slice(0, 4).map(({ activity, score }) => ({
+    row: activity.row,
+    item: activity.item,
+    description: activity.description,
+    unit: activity.unit,
+    chapter: activity.chapter,
+    score,
+  }));
 }
 
 function movementStatus(activity, entry, forcePending = false) {
@@ -564,6 +650,35 @@ function movementValue(activity, entry) {
   if (!activity || !entry.quantity) return 0;
   const sign = entry.type === "no_ejecutado" ? -1 : 1;
   return sign * entry.quantity * (activity.unitPrice || 0);
+}
+
+function movementFromEntry(entry, activity, status, extra = {}) {
+  return {
+    id: extra.id || `mov-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    createdAt: new Date().toISOString(),
+    project: state.data.project.name,
+    acta: entry.acta === "nuevo" ? `Corte ${entry.date || "sin fecha"}` : entry.acta,
+    date: entry.date,
+    type: entry.type,
+    reportedDescription: entry.description,
+    quantity: entry.quantity,
+    unit: entry.unit,
+    source: entry.source,
+    note: entry.note,
+    status,
+    activity: activity
+      ? {
+          row: activity.row,
+          item: activity.item,
+          description: activity.description,
+          chapter: activity.chapter,
+          unit: activity.unit,
+          unitPrice: activity.unitPrice,
+        }
+      : null,
+    simulatedValue: movementValue(activity, entry),
+    ...extra,
+  };
 }
 
 function validationMessages(activity, entry, suggestions) {
@@ -616,31 +731,9 @@ function createMovement(forcePending = false) {
   }
 
   const status = movementStatus(activity, entry, forcePending);
-  const movement = {
-    id: `mov-${Date.now()}`,
-    createdAt: new Date().toISOString(),
-    project: state.data.project.name,
-    acta: entry.acta === "nuevo" ? `Corte ${entry.date || "sin fecha"}` : entry.acta,
-    date: entry.date,
-    type: entry.type,
-    reportedDescription: entry.description,
-    quantity: entry.quantity,
-    unit: entry.unit,
-    source: entry.source,
-    note: entry.note,
-    status,
-    activity: activity
-      ? {
-          row: activity.row,
-          item: activity.item,
-          description: activity.description,
-          chapter: activity.chapter,
-          unit: activity.unit,
-          unitPrice: activity.unitPrice,
-        }
-      : null,
-    simulatedValue: movementValue(activity, entry),
-  };
+  const movement = movementFromEntry(entry, activity, status, {
+    candidates: candidateSnapshot(matchSuggestions(entry)),
+  });
 
   state.movements.unshift(movement);
   saveMovements();
@@ -670,6 +763,7 @@ function statusLabel(status) {
   return {
     CONFIRMADO: "Confirmado",
     REVISAR_UNIDAD: "Revisar unidad",
+    REVISAR_CANTIDAD: "Revisar cantidad",
     PENDIENTE_REVISION: "Pendiente",
     ADICIONAL_PENDIENTE_APU: "Adicional",
   }[status] || status;
@@ -677,7 +771,7 @@ function statusLabel(status) {
 
 function movementStatusClass(status) {
   if (status === "CONFIRMADO") return "ok";
-  if (status === "REVISAR_UNIDAD" || status === "ADICIONAL_PENDIENTE_APU") return "warn";
+  if (status === "REVISAR_UNIDAD" || status === "REVISAR_CANTIDAD" || status === "ADICIONAL_PENDIENTE_APU") return "warn";
   return "danger";
 }
 
@@ -750,6 +844,44 @@ function movementActions(movement) {
   return actions;
 }
 
+function movementBucketKey(movement) {
+  if (movement.status === "CONFIRMADO") return "confirmed";
+  if (movement.status === "ADICIONAL_PENDIENTE_APU") return "additional";
+  if (movement.status === "REVISAR_CANTIDAD") return "quantity";
+  return "review";
+}
+
+function filteredMovements() {
+  if (state.movementFilter === "all") return state.movements;
+  return state.movements.filter((movement) => movementBucketKey(movement) === state.movementFilter);
+}
+
+function renderMovementBuckets() {
+  const target = $("#movementBuckets");
+  if (!target) return;
+  const buckets = [
+    ["all", "Todos", state.movements.length],
+    ["confirmed", "Listos", state.movements.filter((item) => movementBucketKey(item) === "confirmed").length],
+    ["review", "Revisión", state.movements.filter((item) => movementBucketKey(item) === "review").length],
+    ["quantity", "Cantidad", state.movements.filter((item) => movementBucketKey(item) === "quantity").length],
+    ["additional", "Adicionales", state.movements.filter((item) => movementBucketKey(item) === "additional").length],
+  ];
+  target.innerHTML = buckets
+    .map(([key, label, count]) => `
+      <button class="${state.movementFilter === key ? "active" : ""}" data-movement-filter="${key}">
+        <span>${label}</span>
+        <strong>${count}</strong>
+      </button>
+    `)
+    .join("");
+  document.querySelectorAll("[data-movement-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.movementFilter = button.dataset.movementFilter;
+      renderIngestion();
+    });
+  });
+}
+
 function renderIngestion() {
   if (!$("#entryForm")) return;
   const entry = entryValues();
@@ -766,6 +898,7 @@ function renderIngestion() {
   $("#ingestCount").textContent = state.movements.length;
   $("#ingestPendingCount").textContent = pendingCount;
   $("#ingestTotalValue").textContent = formatMoney(total);
+  renderMovementBuckets();
 
   if (activity) {
     const unitMismatch = selectedUnitMismatch(activity, entry);
@@ -809,14 +942,15 @@ function renderIngestion() {
     .map(([kind, message]) => `<div class="validation-item ${kind}">${message}</div>`)
     .join("");
 
+  const movementRows = filteredMovements();
   $("#movementLedger").innerHTML =
-    state.movements.length
-      ? state.movements
+    movementRows.length
+      ? movementRows
           .map((movement) => `
             <article class="movement-row" data-movement="${movement.id}">
               <div>
                 <strong>${movement.activity ? `${movement.activity.item} · ${truncate(movement.activity.description, 86)}` : truncate(movement.reportedDescription || "Sin actividad", 92)}</strong>
-                <span class="row-meta">${movement.acta} · ${movement.source || "Sin fuente"} · ${movement.date || "sin fecha"}</span>
+                <span class="row-meta">${movement.acta} · ${movement.source || "Sin fuente"} · ${movement.date || "sin fecha"}${movement.reviewReason ? ` · ${movement.reviewReason}` : ""}</span>
               </div>
               <div>
                 <strong>${number.format(movement.quantity)} ${movement.unit || ""}</strong>
@@ -826,7 +960,7 @@ function renderIngestion() {
             </article>
           `)
           .join("")
-      : `<p class="empty">Aún no hay movimientos guardados en esta sesión.</p>`;
+      : `<p class="empty">No hay movimientos en este filtro.</p>`;
 
   document.querySelectorAll(".movement-row").forEach((row) => {
     row.addEventListener("click", () => {
@@ -839,6 +973,8 @@ function renderIngestion() {
         ["Valor simulado", formatMoney(movement.simulatedValue)],
         ["Fuente", movement.source || "Sin fuente"],
         ["Observación", movement.note || "Sin observación"],
+        ["Revisión", movement.reviewReason || "Sin alerta adicional"],
+        ["Candidatos", movement.candidates?.map((candidate) => `${candidate.item} (${candidate.score}%): ${candidate.description}`).join(" | ")],
       ], movementActions(movement));
     });
   });
@@ -1191,6 +1327,7 @@ function bindEvents() {
   });
   $("#parseQuickEntry")?.addEventListener("click", parseQuickEntry);
   $("#autoSaveQuickEntry")?.addEventListener("click", () => parseQuickEntry({ autoSave: true }));
+  $("#processQuickLines")?.addEventListener("click", processQuickLines);
   $("#quickEntry")?.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       parseQuickEntry({ autoSave: event.shiftKey });

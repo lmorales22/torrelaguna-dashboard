@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Torre Laguna | Dashboard de obra</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260505-sprint1" />
+    <link rel="stylesheet" href="./styles.css?v=20260505-sprint2" />
   </head>
   <body>
     <div class="app-shell">
@@ -235,6 +235,7 @@
             <div class="quick-actions">
               <button id="parseQuickEntry" type="button">Interpretar</button>
               <button id="autoSaveQuickEntry" type="button">Guardar claro</button>
+              <button id="processQuickLines" type="button">Procesar líneas</button>
             </div>
           </section>
 
@@ -334,6 +335,7 @@
                 <input id="movementImportFile" type="file" accept="application/json,.json" hidden />
               </div>
             </div>
+            <div id="movementBuckets" class="movement-buckets"></div>
             <div id="movementLedger" class="movement-ledger"></div>
           </section>
 
@@ -426,6 +428,6 @@
       </aside>
     </div>
 
-    <script src="./app.js?v=20260505-sprint1"></script>
+    <script src="./app.js?v=20260505-sprint2"></script>
   </body>
 </html>
