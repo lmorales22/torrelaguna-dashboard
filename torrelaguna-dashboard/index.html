@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dashboard de obra</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260505-sprint11-client-soft" />
+    <link rel="stylesheet" href="./styles.css?v=20260505-sprint12-client-totals" />
   </head>
   <body>
     <div class="app-shell">
@@ -73,14 +73,32 @@
             </div>
           </div>
 
-          <div class="client-kpis">
+          <section class="client-value-stack" aria-label="Composición del valor de obra">
             <div>
-              <span>Contrato estimado</span>
+              <span>Contrato inicial</span>
+              <small>Matriz presupuesto · G238</small>
               <strong id="clientContractTotal">$0</strong>
             </div>
             <div>
+              <span>Adicionales de obra</span>
+              <small>Matriz presupuesto · I238</small>
+              <strong id="clientAdditionalTotal">$0</strong>
+            </div>
+            <div class="client-value-total">
+              <span>Gran total obra</span>
+              <small>Contrato inicial + adicionales</small>
+              <strong id="clientGrandTotal">$0</strong>
+            </div>
+          </section>
+
+          <div class="client-kpis">
+            <div>
               <span>Ejecutado a corte</span>
               <strong id="clientExecutedTotal">$0</strong>
+            </div>
+            <div>
+              <span>Avance contrato inicial</span>
+              <strong id="clientProgressKpi">0%</strong>
             </div>
             <div>
               <span>Última semana</span>
@@ -98,7 +116,7 @@
               <strong id="clientBriefProgress">Cargando lectura...</strong>
             </div>
             <div>
-              <span>Saldo por ejecutar</span>
+              <span>Saldo contrato inicial</span>
               <strong id="clientBalanceTotal">$0</strong>
             </div>
             <div>
@@ -534,6 +552,6 @@
       </aside>
     </div>
 
-    <script src="./app.js?v=20260505-sprint11-client-soft"></script>
+    <script src="./app.js?v=20260505-sprint12-client-totals"></script>
   </body>
 </html>

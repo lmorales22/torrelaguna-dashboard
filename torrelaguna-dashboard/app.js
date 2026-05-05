@@ -35,7 +35,7 @@ const ALIAS_KEY_PREFIX = "obra-control-alias-memory";
 const DEFAULT_DATA_URL = "./data/torrelaguna.json";
 const DEFAULT_CATALOG_URL = "./data/apu_catalog.json";
 const PACKAGE_SCHEMA_VERSION = "obra-control.v0.3";
-const DASHBOARD_BUILD = "20260505-sprint11-client-soft";
+const DASHBOARD_BUILD = "20260505-sprint12-client-totals";
 const DEFAULT_UNITS = ["m2", "ml", "m", "und", "gl", "kg", "m3"];
 const DEFAULT_SOURCES = ["Medina", "Albeiro", "Grillo", "Jairo", "Visita de obra", "Memoria de obra", "Foto soporte"];
 const ENTRY_TEMPLATES = [
@@ -404,7 +404,9 @@ function clientWeekRows(contractTotal, executedTotal) {
 
 function clientReportModel() {
   const { summary, project } = state.data;
-  const contractTotal = summary.contractTotal || summary.budgetTotal;
+  const contractTotal = summary.clientContractTotal || summary.contractTotal || summary.budgetTotal || 0;
+  const additionalTotal = summary.additionalTotal || 0;
+  const grandTotal = contractTotal + additionalTotal;
   const executedTotal = summary.executedContractTotal || summary.executedTotal;
   const balance = Math.max(contractTotal - executedTotal, 0);
   const weeks = clientWeekRows(contractTotal, executedTotal);
@@ -418,12 +420,15 @@ function clientReportModel() {
   const latestWeek = weeks[weeks.length - 1];
   const bestWeek = [...weeks].sort((a, b) => b.contractValue - a.contractValue)[0];
   const averageWeek = weeks.length ? weeks.reduce((sum, week) => sum + week.contractValue, 0) / weeks.length : 0;
-  const progress = summary.contractProgress || summary.progress || 0;
+  const progress = contractTotal ? executedTotal / contractTotal : summary.contractProgress || summary.progress || 0;
+  const totalProgress = grandTotal ? executedTotal / grandTotal : progress;
 
   return {
     summary,
     project,
     contractTotal,
+    additionalTotal,
+    grandTotal,
     executedTotal,
     balance,
     weeks,
@@ -433,6 +438,7 @@ function clientReportModel() {
     bestWeek,
     averageWeek,
     progress,
+    totalProgress,
   };
 }
 
@@ -441,6 +447,8 @@ function renderClient() {
     summary,
     project,
     contractTotal,
+    additionalTotal,
+    grandTotal,
     executedTotal,
     balance,
     weeks,
@@ -450,23 +458,27 @@ function renderClient() {
     bestWeek,
     averageWeek,
     progress,
+    totalProgress,
   } = clientReportModel();
 
   $("#clientFreshness").textContent = `Corte generado desde ${project.sourceSheet || "CORTES_OBRA"} · ${project.generatedAt || project.updatedAt}`;
   $("#clientProgressValue").textContent = formatPercent(progress);
   $(".client-progress")?.style.setProperty("--client-progress", `${Math.min(Math.max(progress * 100, 0), 100)}%`);
-  $("#clientProgressContext").textContent = "Ejecutado a corte";
+  $("#clientProgressContext").textContent = "Sobre contrato inicial";
   $("#clientHeroStatus").textContent =
     progress >= 0.75 ? "Avance alto" : progress >= 0.45 ? "Obra en ejecución" : "Corte inicial";
   $("#clientHeroWeeks").textContent = `${weeks.length} semanas valorizadas`;
   $("#clientHeroSource").textContent = project.sourceSheet || "CORTES_OBRA";
   $("#clientContractTotal").textContent = formatMoney(contractTotal);
+  $("#clientAdditionalTotal").textContent = formatMoney(additionalTotal);
+  $("#clientGrandTotal").textContent = formatMoney(grandTotal);
   $("#clientExecutedTotal").textContent = formatMoney(executedTotal);
+  $("#clientProgressKpi").textContent = formatPercent(progress);
   $("#clientLatestWeek").textContent = formatMoney(latestWeek?.contractValue || 0);
   $("#clientAverageWeek").textContent = formatMoney(averageWeek);
   $("#clientBalanceTotal").textContent = formatMoney(balance);
   $("#clientActiveActivities").textContent = `${summary.activeActivityCount} / ${summary.activityCount}`;
-  $("#clientBriefProgress").textContent = `${formatPercent(progress)} ejecutado · ${weeks.length} semanas con avance · ${formatMoney(balance)} por ejecutar.`;
+  $("#clientBriefProgress").textContent = `${formatMoney(contractTotal)} de contrato inicial + ${formatMoney(additionalTotal)} en adicionales = ${formatMoney(grandTotal)} de obra total. Avance sobre contrato inicial: ${formatPercent(progress)}.`;
   $("#clientUpdatedTotal").textContent = formatMoney(summary.updatedTotal || 0);
   $("#clientNotExecuted").textContent = formatMoney(summary.notExecutedTotal || 0);
   $("#clientAlerts").textContent = activePending().length;
@@ -2227,10 +2239,13 @@ function clientExcelWorksheets() {
   const summaryRows = [
     ...reportMetaRows("Informe cliente", "Lectura ejecutiva valorizada por semana para comité o reunión con cliente."),
     excelHeader(["Indicador", "Valor"]),
-    ["Contrato estimado", excelCell(model.contractTotal, "Money")],
+    ["Contrato inicial (G238)", excelCell(model.contractTotal, "Money")],
+    ["Adicionales de obra (I238)", excelCell(model.additionalTotal, "Money")],
+    ["Gran total obra", excelCell(model.grandTotal, "Money")],
     ["Ejecutado a corte", excelCell(model.executedTotal, "Money")],
-    ["Avance valorizado", excelCell(model.progress, "Percent")],
-    ["Saldo por ejecutar", excelCell(model.balance, "Money")],
+    ["Avance sobre contrato inicial", excelCell(model.progress, "Percent")],
+    ["Avance sobre total obra", excelCell(model.totalProgress, "Percent")],
+    ["Saldo sobre contrato inicial", excelCell(model.balance, "Money")],
     ["Última semana", excelCell(model.latestWeek?.contractValue || 0, "Money")],
     ["Promedio semanal", excelCell(model.averageWeek, "Money")],
     ["Actividades con avance", `${model.summary.activeActivityCount} / ${model.summary.activityCount}`],
@@ -2269,6 +2284,9 @@ function clientExcelWorksheets() {
   const scopeRows = [
     ...reportMetaRows("Alcance y decisiones"),
     excelHeader(["Señal", "Valor", "Lectura"]),
+    ["Contrato inicial", excelCell(model.contractTotal, "Money"), "Registro leído como base del informe cliente desde la matriz presupuestal."],
+    ["Adicionales de obra", excelCell(model.additionalTotal, "Money"), "Suma de adicionales de obra leída para mostrar el alcance complementario."],
+    ["Gran total obra", excelCell(model.grandTotal, "Money"), "Suma del contrato inicial y los adicionales de obra."],
     ["Presupuesto actualizado directo", excelCell(model.summary.updatedTotal || 0, "Money"), "Valor directo resultante de cantidades actualizadas dentro de la hoja de cortes."],
     ["No ejecutado directo", excelCell(model.summary.notExecutedTotal || 0, "Money"), "Valor directo identificado como no ejecutado en la lectura actual del archivo."],
     ["Adicional estimado directo", excelCell(model.summary.additionalTotal || 0, "Money"), "Lectura técnica; requiere revisión de alcance antes de presentarse como decisión final."],
@@ -2674,19 +2692,19 @@ function clientReportHtml(model = clientReportModel()) {
         <img src="${logo}" alt="Tottem Architecture" />
       </header>
       <section class="summary">
-        <div><span>Contrato estimado</span><strong>${formatMoney(model.contractTotal)}</strong></div>
+        <div><span>Contrato inicial · G238</span><strong>${formatMoney(model.contractTotal)}</strong></div>
+        <div><span>Adicionales de obra · I238</span><strong>${formatMoney(model.additionalTotal)}</strong></div>
+        <div><span>Gran total obra</span><strong>${formatMoney(model.grandTotal)}</strong></div>
         <div><span>Ejecutado a corte</span><strong>${formatMoney(model.executedTotal)}</strong></div>
-        <div><span>Última semana</span><strong>${formatMoney(model.latestWeek?.contractValue || 0)}</strong></div>
-        <div><span>Saldo por ejecutar</span><strong>${formatMoney(model.balance)}</strong></div>
       </section>
       <section class="brief">
         <div>
           <h2>Lectura ejecutiva</h2>
-          <p>${formatPercent(model.progress)} ejecutado, ${model.weeks.length} semanas con avance y ${model.summary.activeActivityCount} actividades con movimiento visible. Las actas siguen como soporte técnico, pero la lectura para cliente se presenta por semana.</p>
+          <p>El informe separa ${formatMoney(model.contractTotal)} de contrato inicial y ${formatMoney(model.additionalTotal)} de adicionales de obra, para un gran total de ${formatMoney(model.grandTotal)}. El avance sobre el contrato inicial es ${formatPercent(model.progress)} y el avance sobre la totalidad de obra es ${formatPercent(model.totalProgress)}.</p>
         </div>
         <div class="progress-ring">
           <strong>${formatPercent(model.progress)}</strong>
-          <span>Avance valorizado</span>
+          <span>Avance contrato inicial</span>
         </div>
       </section>
       <section class="block">
@@ -2706,8 +2724,8 @@ function clientReportHtml(model = clientReportModel()) {
       <section class="block">
         <h2>Alcance y decisiones</h2>
         <div class="scope">
-          <div><span>Presupuesto actualizado directo</span><strong>${formatMoney(model.summary.updatedTotal || 0)}</strong></div>
-          <div><span>No ejecutado directo</span><strong>${formatMoney(model.summary.notExecutedTotal || 0)}</strong></div>
+          <div><span>Última semana</span><strong>${formatMoney(model.latestWeek?.contractValue || 0)}</strong></div>
+          <div><span>Saldo contrato inicial</span><strong>${formatMoney(model.balance)}</strong></div>
           <div><span>Alertas internas</span><strong>${activePending().length}</strong></div>
         </div>
       </section>
