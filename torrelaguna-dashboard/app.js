@@ -3,6 +3,8 @@ const state = {
   catalog: null,
   catalogPool: [],
   catalogStatus: "loading",
+  dailyContext: {},
+  aliases: {},
   section: "overview",
   query: "",
   acta: "all",
@@ -28,17 +30,23 @@ const $ = (selector) => document.querySelector(selector);
 const LEGACY_DECISION_KEY = "torrelaguna-field-alert-decisions";
 const DECISION_KEY_PREFIX = "obra-control-local-decisions";
 const MOVEMENT_KEY_PREFIX = "obra-control-local-movements";
+const CONTEXT_KEY_PREFIX = "obra-control-daily-context";
+const ALIAS_KEY_PREFIX = "obra-control-alias-memory";
 const DEFAULT_DATA_URL = "./data/torrelaguna.json";
 const DEFAULT_CATALOG_URL = "./data/apu_catalog.json";
 const PACKAGE_SCHEMA_VERSION = "obra-control.v0.3";
-const DASHBOARD_BUILD = "20260505-sprint6-apu-catalog";
+const DASHBOARD_BUILD = "20260505-sprint7-frictionless-ingest";
 const DEFAULT_UNITS = ["m2", "ml", "m", "und", "gl", "kg", "m3"];
 const DEFAULT_SOURCES = ["Medina", "Albeiro", "Grillo", "Jairo", "Visita de obra", "Memoria de obra", "Foto soporte"];
 const ENTRY_TEMPLATES = [
-  ["avance", "Avance", "Cantidad ejecutada en campo."],
-  ["adicional", "Adicional", "Posible actividad fuera de alcance base."],
-  ["correccion", "Corrección", "Ajuste de cantidad o clasificación."],
-  ["no_ejecutado", "No ejecutado", "Actividad descontada o anulada."],
+  { id: "avance", label: "Avance", type: "avance", note: "Cantidad ejecutada en campo." },
+  { id: "adicional", label: "Adicional", type: "adicional", note: "Posible actividad fuera de alcance base." },
+  { id: "correccion", label: "Corrección", type: "correccion", note: "Ajuste de cantidad o clasificación." },
+  { id: "no_ejecutado", label: "No ejecutado", type: "no_ejecutado", note: "Actividad descontada o anulada." },
+  { id: "reproceso", label: "Reproceso", type: "correccion", note: "Revisión por reproceso o corrección en campo." },
+  { id: "soporte", label: "Soporte foto", type: "avance", note: "Pendiente adjuntar o validar soporte fotográfico." },
+  { id: "pendiente", label: "Verificar", type: "avance", note: "Pendiente confirmar ubicación, alcance o cantidad." },
+  { id: "frente", label: "Frente/Piso", type: "avance", note: "Registrar frente, piso o ubicación exacta del avance." },
 ];
 const STOP_WORDS = new Set([
   "con",
@@ -456,16 +464,112 @@ function renderClient() {
   });
 }
 
-function entryValues() {
+function localDateString(date = new Date()) {
+  const localDate = new Date(date);
+  localDate.setMinutes(localDate.getMinutes() - localDate.getTimezoneOffset());
+  return localDate.toISOString().slice(0, 10);
+}
+
+function contextStorageKey() {
+  const projectName = normalizeLoose(state.data?.project?.name || "obra");
+  return `${CONTEXT_KEY_PREFIX}:${projectName || "obra"}`;
+}
+
+function aliasStorageKey() {
+  const projectName = normalizeLoose(state.data?.project?.name || "obra");
+  return `${ALIAS_KEY_PREFIX}:${projectName || "obra"}`;
+}
+
+function defaultDailyContext() {
   return {
-    acta: $("#entryActa")?.value || "nuevo",
-    date: $("#entryDate")?.value || "",
+    acta: "nuevo",
+    date: localDateString(),
+    source: "",
+    zone: "",
+    fieldMode: false,
+  };
+}
+
+function loadDailyContext() {
+  try {
+    state.dailyContext = { ...defaultDailyContext(), ...JSON.parse(localStorage.getItem(contextStorageKey()) || "{}") };
+  } catch {
+    state.dailyContext = defaultDailyContext();
+  }
+}
+
+function saveDailyContext() {
+  localStorage.setItem(contextStorageKey(), JSON.stringify(state.dailyContext));
+}
+
+function loadAliases() {
+  try {
+    state.aliases = JSON.parse(localStorage.getItem(aliasStorageKey()) || "{}");
+  } catch {
+    state.aliases = {};
+  }
+}
+
+function saveAliases() {
+  localStorage.setItem(aliasStorageKey(), JSON.stringify(state.aliases));
+}
+
+function currentDailyContext() {
+  return {
+    acta: $("#partActa")?.value || state.dailyContext.acta || "nuevo",
+    date: $("#partDate")?.value || state.dailyContext.date || localDateString(),
+    source: ($("#partSource")?.value || state.dailyContext.source || "").trim(),
+    zone: ($("#partZone")?.value || state.dailyContext.zone || "").trim(),
+    fieldMode: Boolean($("#fieldMode")?.checked),
+  };
+}
+
+function applyDailyContextToForm({ overwrite = false } = {}) {
+  const context = state.dailyContext;
+  if ($("#partActa")) $("#partActa").value = context.acta || "nuevo";
+  if ($("#partDate")) $("#partDate").value = context.date || localDateString();
+  if ($("#partSource")) $("#partSource").value = context.source || "";
+  if ($("#partZone")) $("#partZone").value = context.zone || "";
+  if ($("#fieldMode")) $("#fieldMode").checked = Boolean(context.fieldMode);
+  document.body.classList.toggle("field-mode", Boolean(context.fieldMode));
+
+  if (overwrite || !$("#entryActa")?.value || $("#entryActa")?.value === "nuevo") $("#entryActa").value = context.acta || "nuevo";
+  if (overwrite || !$("#entryDate")?.value) $("#entryDate").value = context.date || localDateString();
+  if (overwrite || !$("#entrySource")?.value) $("#entrySource").value = context.source || "";
+  renderContextSummary();
+}
+
+function updateDailyContext(partial = {}) {
+  state.dailyContext = { ...defaultDailyContext(), ...state.dailyContext, ...partial };
+  saveDailyContext();
+  applyDailyContextToForm();
+}
+
+function renderContextSummary() {
+  const target = $("#contextSummary");
+  if (!target) return;
+  const context = currentDailyContext();
+  const pieces = [
+    context.date || "sin fecha",
+    context.acta === "nuevo" ? "nuevo corte" : context.acta,
+    context.source || "sin fuente",
+    context.zone || "sin frente",
+  ];
+  target.textContent = pieces.join(" · ");
+}
+
+function entryValues() {
+  const context = currentDailyContext();
+  return {
+    acta: $("#entryActa")?.value || context.acta || "nuevo",
+    date: $("#entryDate")?.value || context.date || "",
     type: $("#entryType")?.value || "avance",
     quantity: Number($("#entryQuantity")?.value || 0),
     unit: ($("#entryUnit")?.value || "").trim(),
-    source: ($("#entrySource")?.value || "").trim(),
+    source: ($("#entrySource")?.value || context.source || "").trim(),
     description: ($("#entryDescription")?.value || "").trim(),
     note: ($("#entryNote")?.value || "").trim(),
+    zone: context.zone,
   };
 }
 
@@ -477,9 +581,95 @@ function normalizeUnitToken(unit) {
     .replace(/^un$|^u$/, "und");
 }
 
-function parseEntryText(raw) {
-  const base = entryValues();
-  const entry = { ...base, quantity: 0, unit: "", source: base.source, description: "", note: "", rawLine: raw };
+const MONTHS_ES = {
+  ene: 0,
+  enero: 0,
+  feb: 1,
+  febrero: 1,
+  mar: 2,
+  marzo: 2,
+  abr: 3,
+  abril: 3,
+  may: 4,
+  mayo: 4,
+  jun: 5,
+  junio: 5,
+  jul: 6,
+  julio: 6,
+  ago: 7,
+  agosto: 7,
+  sep: 8,
+  sept: 8,
+  septiembre: 8,
+  oct: 9,
+  octubre: 9,
+  nov: 10,
+  noviembre: 10,
+  dic: 11,
+  diciembre: 11,
+};
+
+function parseDateHint(text) {
+  const value = normalizeLoose(text);
+  const numeric = value.match(/\b(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?\b/);
+  if (numeric) {
+    const year = numeric[3]
+      ? Number(numeric[3].length === 2 ? `20${numeric[3]}` : numeric[3])
+      : new Date().getFullYear();
+    return localDateString(new Date(year, Number(numeric[2]) - 1, Number(numeric[1])));
+  }
+  const named = value.match(/\b(\d{1,2})(?:\s+de)?\s+(ene|enero|feb|febrero|mar|marzo|abr|abril|may|mayo|jun|junio|jul|julio|ago|agosto|sep|sept|septiembre|oct|octubre|nov|noviembre|dic|diciembre)\b/);
+  if (!named) return "";
+  return localDateString(new Date(new Date().getFullYear(), MONTHS_ES[named[2]], Number(named[1])));
+}
+
+function detectSource(text) {
+  const normalized = normalizeLoose(text);
+  const known = sourceOptions().find((source) => normalized.includes(normalizeLoose(source)));
+  if (known) return known;
+  const explicit = text.match(/\b(?:fuente|procedencia|soporte|contratista)\s*[:\-]?\s*([^,;:]+)/i);
+  return explicit ? explicit[1].trim() : "";
+}
+
+function quickSharedContext(raw) {
+  const context = currentDailyContext();
+  const colonIndex = raw.indexOf(":");
+  const prefix = colonIndex > -1 && colonIndex < 80 ? raw.slice(0, colonIndex) : "";
+  const source = detectSource(prefix || raw) || context.source;
+  const date = parseDateHint(prefix || raw) || context.date;
+  return {
+    ...context,
+    source,
+    date,
+    prefix,
+    body: prefix ? raw.slice(colonIndex + 1) : raw,
+  };
+}
+
+function splitQuickEntries(raw) {
+  const shared = quickSharedContext(raw);
+  const body = shared.body
+    .replace(/\r/g, "\n")
+    .replace(/\s*,\s*(?=-?\d+(?:[.,]\d+)?\s*(?:m2|m²|m3|m³|ml|und|un|u|gl|kg|m)\b)/gi, "\n");
+  return body
+    .split(/\n+|;/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => ({ line, shared }));
+}
+
+function parseEntryText(raw, overrides = {}) {
+  const base = { ...entryValues(), ...overrides };
+  const entry = {
+    ...base,
+    quantity: 0,
+    unit: "",
+    source: base.source || "",
+    description: "",
+    note: base.note || "",
+    rawLine: raw,
+    zone: base.zone || "",
+  };
   const quantityMatch = raw.match(/(-?\d+(?:[.,]\d+)?)\s*(m2|m²|m3|m³|ml|und|un|u|gl|kg|m)\b/i);
   const sourceMatch = raw.match(/\b(?:fuente|procedencia|soporte|contratista)\s*[:\-]?\s*([^,;]+)/i);
   const typeMatch = raw.match(/\b(adicional|correcci[oó]n|no ejecutado|avance)\b/i);
@@ -512,12 +702,14 @@ function parseEntryText(raw) {
 }
 
 function fillEntryForm(entry) {
+  $("#entryActa").value = entry.acta || currentDailyContext().acta || "nuevo";
+  $("#entryDate").value = entry.date || currentDailyContext().date || localDateString();
   $("#entryQuantity").value = entry.quantity || "";
   $("#entryUnit").value = entry.unit || "";
   $("#entrySource").value = entry.source || "";
   $("#entryType").value = entry.type || "avance";
   $("#entryDescription").value = entry.description || "";
-  $("#entryNote").value = entry.note || "";
+  $("#entryNote").value = entry.note || (entry.zone ? `Frente: ${entry.zone}` : "");
 }
 
 function uniqueValues(values) {
@@ -526,6 +718,7 @@ function uniqueValues(values) {
 
 function sourceOptions() {
   return uniqueValues([
+    state.dailyContext.source,
     ...DEFAULT_SOURCES,
     ...state.movements.map((movement) => movement.source),
   ]).slice(0, 18);
@@ -546,6 +739,63 @@ function suggestedActivities() {
     .slice(0, 8);
   if (active.length) return active;
   return [...state.data.activities].sort((a, b) => b.budgetValue - a.budgetValue).slice(0, 8);
+}
+
+function aliasKey(description, unit = "") {
+  return `${normalizeLoose(description)}|${normalizeLoose(unit)}`;
+}
+
+function aliasEntries() {
+  return Object.entries(state.aliases || {})
+    .map(([key, value]) => ({ key, ...value }))
+    .sort((a, b) => (b.count || 0) - (a.count || 0));
+}
+
+function aliasForEntry(entry) {
+  return state.aliases[aliasKey(entry.description, entry.unit)] || state.aliases[aliasKey(entry.description, "")] || null;
+}
+
+function learnAlias(entry, activity) {
+  if (!activity || !entry.description || normalizeLoose(entry.description) === normalizeLoose(activity.description)) return;
+  const key = aliasKey(entry.description, entry.unit);
+  state.aliases[key] = {
+    description: entry.description,
+    unit: entry.unit,
+    row: activity.row,
+    item: activity.item,
+    activityDescription: activity.description,
+    count: (state.aliases[key]?.count || 0) + 1,
+    updatedAt: new Date().toISOString(),
+  };
+  saveAliases();
+}
+
+function favoriteActivities() {
+  const usage = state.movements.reduce((acc, movement) => {
+    if (movement.activity?.row) acc[movement.activity.row] = (acc[movement.activity.row] || 0) + 5;
+    return acc;
+  }, {});
+  aliasEntries().forEach((alias) => {
+    if (alias.row) usage[alias.row] = (usage[alias.row] || 0) + Math.min(alias.count || 1, 6);
+  });
+  return [...state.data.activities]
+    .map((activity) => ({
+      ...activity,
+      favoriteScore: (usage[activity.row] || 0) + (activity.executedValue > 0 ? 4 : 0) + Math.min((activity.budgetValue || 0) / 1000000, 5),
+    }))
+    .sort((a, b) => b.favoriteScore - a.favoriteScore)
+    .slice(0, 12);
+}
+
+function applyAliasSuggestion(key) {
+  const alias = state.aliases[key];
+  if (!alias) return;
+  const activity = state.data.activities.find((item) => String(item.row) === String(alias.row));
+  $("#entryDescription").value = alias.description || "";
+  $("#entryUnit").value = alias.unit || activity?.unit || "";
+  state.selectedMatchRow = activity?.row || null;
+  renderIngestion();
+  $("#entryQuantity")?.focus();
 }
 
 function catalogPools() {
@@ -647,13 +897,14 @@ function applySourceSuggestion(source) {
 }
 
 function applyTemplate(kind) {
-  const template = ENTRY_TEMPLATES.find(([id]) => id === kind);
+  const template = ENTRY_TEMPLATES.find((item) => item.id === kind);
   if (!template) return;
-  $("#entryType").value = kind;
+  $("#entryType").value = template.type;
   if (!$("#entryNote").value) {
-    $("#entryNote").value = template[2];
+    const zone = currentDailyContext().zone;
+    $("#entryNote").value = zone ? `${template.note} Frente: ${zone}.` : template.note;
   }
-  if (kind === "adicional") {
+  if (template.type === "adicional") {
     state.selectedMatchRow = null;
   }
   renderIngestion();
@@ -663,7 +914,13 @@ function applyTemplate(kind) {
 function parseQuickEntry(options = {}) {
   const raw = ($("#quickEntry")?.value || "").trim();
   if (!raw) return;
-  const entry = parseEntryText(raw.split(/\n+/).find((line) => line.trim()) || raw);
+  const parsed = splitQuickEntries(raw)[0];
+  if (!parsed) return;
+  updateDailyContext({
+    date: parsed.shared.date,
+    source: parsed.shared.source,
+  });
+  const entry = parseEntryText(parsed.line, parsed.shared);
   fillEntryForm(entry);
   state.selectedMatchRow = null;
   autoSelectClearMatch();
@@ -677,6 +934,8 @@ function scoreActivity(activity, entry) {
   const descriptionTokens = tokensFor(entry.description);
   const unit = normalizeLoose(entry.unit);
   if (!descriptionTokens.length && !unit) return 0;
+  const alias = aliasForEntry(entry);
+  if (alias && String(alias.row) === String(activity.row)) return 97;
 
   const activityText = normalizeLoose([
     activity.item,
@@ -760,14 +1019,16 @@ function autoSaveClearEntry() {
 }
 
 function processQuickLines() {
-  const lines = ($("#quickEntry")?.value || "")
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (!lines.length) return;
+  const raw = ($("#quickEntry")?.value || "").trim();
+  const entries = splitQuickEntries(raw);
+  if (!entries.length) return;
+  updateDailyContext({
+    date: entries[0].shared.date,
+    source: entries[0].shared.source,
+  });
 
-  const created = lines.map((line, index) => {
-    const entry = parseEntryText(line);
+  const created = entries.map(({ line, shared }, index) => {
+    const entry = parseEntryText(line, shared);
     const suggestions = matchSuggestions(entry);
     const clear = clearMatchCandidate(entry, suggestions);
     const activity = clear?.activity || null;
@@ -793,13 +1054,15 @@ function processQuickLines() {
       reviewReason = `Cantidad supera saldo visible (${number.format(activity.balanceQty)} ${activity.unit}).`;
     }
 
-    return movementFromEntry(entry, activity, status, {
+    const movement = movementFromEntry(entry, activity, status, {
       rawLine: line,
       lineNumber: index + 1,
       reviewReason,
       candidates: candidateSnapshot(suggestions),
       apuCandidates: catalogCandidateSnapshot(entry),
     });
+    learnAlias(entry, activity);
+    return movement;
   });
 
   state.movements = [...created, ...state.movements];
@@ -860,6 +1123,7 @@ function movementFromEntry(entry, activity, status, extra = {}) {
     unit: entry.unit,
     source: entry.source,
     note: entry.note,
+    zone: entry.zone,
     status,
     activity: activity
       ? {
@@ -931,11 +1195,18 @@ function createMovement(forcePending = false) {
     apuCandidates: catalogCandidateSnapshot(entry),
   });
 
+  learnAlias(entry, activity);
+  updateDailyContext({
+    acta: entry.acta,
+    date: entry.date,
+    source: entry.source,
+    zone: entry.zone,
+  });
   state.movements.unshift(movement);
   saveMovements();
   state.selectedMatchRow = null;
   $("#entryForm").reset();
-  setDefaultEntryDate();
+  applyDailyContextToForm();
   renderIngestion();
   openInspector(statusLabel(status), movement.reportedDescription || movement.activity?.description || "Movimiento guardado.", [
     ["Acta", movement.acta],
@@ -943,15 +1214,14 @@ function createMovement(forcePending = false) {
     ["Ítem destino", movement.activity ? `${movement.activity.item} · ${movement.activity.description}` : "Pendiente"],
     ["Valor simulado", formatMoney(movement.simulatedValue)],
     ["Fuente", movement.source || "Sin fuente"],
+    ["Frente", movement.zone || "Sin frente"],
   ], movementActions(movement));
 }
 
 function setDefaultEntryDate() {
   const input = $("#entryDate");
   if (input && !input.value) {
-    const localDate = new Date();
-    localDate.setMinutes(localDate.getMinutes() - localDate.getTimezoneOffset());
-    input.value = localDate.toISOString().slice(0, 10);
+    input.value = state.dailyContext.date || localDateString();
   }
 }
 
@@ -1175,7 +1445,7 @@ function renderEntryAssist() {
     .join("");
 
   $("#templateAssist").innerHTML = ENTRY_TEMPLATES
-    .map(([id, label]) => `<button type="button" data-assist-template="${id}">${label}</button>`)
+    .map((template) => `<button type="button" data-assist-template="${template.id}">${template.label}</button>`)
     .join("");
 
   document.querySelectorAll("[data-assist-activity]").forEach((button) => {
@@ -1186,6 +1456,30 @@ function renderEntryAssist() {
   });
   document.querySelectorAll("[data-assist-template]").forEach((button) => {
     button.addEventListener("click", () => applyTemplate(button.dataset.assistTemplate));
+  });
+
+  $("#favoriteAssist").innerHTML = favoriteActivities()
+    .map((activity) => `
+      <button type="button" data-assist-activity="${activity.row}">
+        <strong>${activity.item} · ${activity.unit}</strong>
+        <span>${truncate(activity.description, 68)}</span>
+      </button>
+    `)
+    .join("");
+
+  document.querySelectorAll("#favoriteAssist [data-assist-activity]").forEach((button) => {
+    button.addEventListener("click", () => applyActivitySuggestion(button.dataset.assistActivity));
+  });
+
+  const aliases = aliasEntries().slice(0, 8);
+  $("#aliasAssist").innerHTML = aliases.length
+    ? aliases
+        .map((alias) => `<button type="button" data-assist-alias="${alias.key}">${truncate(alias.description, 42)}</button>`)
+        .join("")
+    : `<span class="empty-inline">Aparecerán cuando corrijas coincidencias.</span>`;
+
+  document.querySelectorAll("[data-assist-alias]").forEach((button) => {
+    button.addEventListener("click", () => applyAliasSuggestion(button.dataset.assistAlias));
   });
 }
 
@@ -1247,6 +1541,7 @@ function renderIngestion() {
   $("#ingestCount").textContent = state.movements.length;
   $("#ingestPendingCount").textContent = pendingCount;
   $("#ingestTotalValue").textContent = formatMoney(total);
+  renderContextSummary();
   renderEntryAssist();
   renderApuAssist(entry);
   renderMovementBuckets();
@@ -1282,6 +1577,36 @@ function renderIngestion() {
           .join("")
       : `<p class="empty">Escribe una actividad de campo para ver coincidencias contra la matriz.</p>`;
 
+  const isAmbiguous =
+    entry.description &&
+    !activity &&
+    suggestions.length > 1 &&
+    (suggestions[0].score - suggestions[1].score < 18 || suggestions[0].score < 78);
+  $("#ambiguityPanel").innerHTML = isAmbiguous
+    ? `
+      <div>
+        <span>Confirmación por ambigüedad</span>
+        <strong>¿A cuál ítem corresponde este avance?</strong>
+      </div>
+      <div class="ambiguity-options">
+        ${suggestions.slice(0, 3).map(({ activity: item, score }) => `
+          <button type="button" data-ambiguity-row="${item.row}">
+            <span>${item.item} · ${item.unit}</span>
+            <strong>${truncate(item.description, 70)}</strong>
+            <small>${item.chapter} · ${score}%</small>
+          </button>
+        `).join("")}
+      </div>
+    `
+    : "";
+
+  document.querySelectorAll("[data-ambiguity-row]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedMatchRow = button.dataset.ambiguityRow;
+      renderIngestion();
+    });
+  });
+
   document.querySelectorAll(".match-option").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedMatchRow = button.dataset.row;
@@ -1301,7 +1626,7 @@ function renderIngestion() {
             <article class="movement-row" data-movement="${movement.id}">
               <div>
                 <strong>${movement.activity ? `${movement.activity.item} · ${truncate(movement.activity.description, 86)}` : truncate(movement.reportedDescription || "Sin actividad", 92)}</strong>
-                <span class="row-meta">${movement.acta} · ${movement.source || "Sin fuente"} · ${movement.date || "sin fecha"}${movement.architectFeedback ? ` · Feedback: ${movementFeedbackLabel(movement.architectFeedback)}` : ""}${movement.reviewReason ? ` · ${movement.reviewReason}` : ""}</span>
+                <span class="row-meta">${movement.acta} · ${movement.source || "Sin fuente"} · ${movement.date || "sin fecha"}${movement.zone ? ` · ${movement.zone}` : ""}${movement.architectFeedback ? ` · Feedback: ${movementFeedbackLabel(movement.architectFeedback)}` : ""}${movement.reviewReason ? ` · ${movement.reviewReason}` : ""}</span>
               </div>
               <div>
                 <strong>${number.format(movement.quantity)} ${movement.unit || ""}</strong>
@@ -1323,6 +1648,7 @@ function renderIngestion() {
         ["Ítem destino", movement.activity ? `${movement.activity.item} · ${movement.activity.description}` : "Pendiente"],
         ["Valor simulado", formatMoney(movement.simulatedValue)],
         ["Fuente", movement.source || "Sin fuente"],
+        ["Frente", movement.zone || "Sin frente"],
         ["Observación", movement.note || "Sin observación"],
         ["Revisión", movement.reviewReason || "Sin alerta adicional"],
         ["Feedback arquitecto", movementFeedbackLabel(movement.architectFeedback)],
@@ -1381,6 +1707,7 @@ function renderHandoffSummary() {
     ["Listos", payload.counts.confirmed],
     ["Por revisar", payload.counts.review + payload.counts.quantity + payload.counts.additional],
     ["Feedback", payload.movements.filter((movement) => movement.architectFeedback).length],
+    ["Alias", payload.aliases.length],
     ["Valor paquete", formatMoney(payload.totals.simulatedValue)],
   ];
   target.innerHTML = `
@@ -1603,9 +1930,13 @@ function buildHandoffPackage() {
     localStorageKeys: {
       movements: movementStorageKey(),
       decisions: decisionStorageKey(),
+      dailyContext: contextStorageKey(),
+      aliases: aliasStorageKey(),
       legacyDecisions: LEGACY_DECISION_KEY,
     },
     decisions,
+    dailyContext: state.dailyContext,
+    aliases: aliasEntries(),
     movements: state.movements,
   };
 }
@@ -1633,6 +1964,7 @@ function packageSummaryText(payload = buildHandoffPackage()) {
     `Adicionales: ${payload.counts.additional}`,
     `Valor simulado: ${formatMoney(payload.totals.simulatedValue)}`,
     `Feedback registrado: ${payload.movements.filter((movement) => movement.architectFeedback).length}`,
+    `Alias aprendidos: ${payload.aliases.length}`,
   ].join("\n");
 }
 
@@ -1785,6 +2117,21 @@ function bindEvents() {
     }
   });
 
+  ["#partActa", "#partDate", "#partSource", "#partZone", "#fieldMode"].forEach((selector) => {
+    $(selector)?.addEventListener("input", () => {
+      state.dailyContext = currentDailyContext();
+      saveDailyContext();
+      applyDailyContextToForm();
+      renderIngestion();
+    });
+    $(selector)?.addEventListener("change", () => {
+      state.dailyContext = currentDailyContext();
+      saveDailyContext();
+      applyDailyContextToForm();
+      renderIngestion();
+    });
+  });
+
   $("#entryForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     createMovement(false);
@@ -1793,7 +2140,7 @@ function bindEvents() {
   $("#entryForm")?.addEventListener("reset", () => {
     window.setTimeout(() => {
       state.selectedMatchRow = null;
-      setDefaultEntryDate();
+      applyDailyContextToForm();
       renderIngestion();
     }, 0);
   });
@@ -1848,12 +2195,14 @@ function bindEvents() {
 function populateFilters() {
   const select = $("#actaFilter");
   const entryActa = $("#entryActa");
+  const partActa = $("#partActa");
   state.data.actas.forEach((acta) => {
     const option = document.createElement("option");
     option.value = acta.name;
     option.textContent = acta.name;
     select.append(option);
     entryActa?.append(option.cloneNode(true));
+    partActa?.append(option.cloneNode(true));
   });
 }
 
@@ -1883,9 +2232,12 @@ async function boot() {
   const response = await fetch(dataUrl);
   state.data = await response.json();
   await loadCatalog();
+  loadDailyContext();
+  loadAliases();
   loadDecisions();
   loadMovements();
   populateFilters();
+  applyDailyContextToForm({ overwrite: true });
   bindEvents();
   setDefaultEntryDate();
   renderAll();

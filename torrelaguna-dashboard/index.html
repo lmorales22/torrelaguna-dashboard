@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dashboard de obra</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260505-sprint6-apu-catalog" />
+    <link rel="stylesheet" href="./styles.css?v=20260505-sprint7-frictionless-ingest" />
   </head>
   <body>
     <div class="app-shell">
@@ -227,10 +227,39 @@
             </div>
           </div>
 
+          <section class="daily-context">
+            <div>
+              <span>Parte diario</span>
+              <strong id="contextSummary">Sin contexto activo</strong>
+            </div>
+            <label>
+              <span>Acta</span>
+              <select id="partActa">
+                <option value="nuevo">Nuevo corte</option>
+              </select>
+            </label>
+            <label>
+              <span>Fecha</span>
+              <input id="partDate" type="date" />
+            </label>
+            <label>
+              <span>Fuente</span>
+              <input id="partSource" type="text" list="sourceSuggestions" placeholder="Medina, Albeiro..." />
+            </label>
+            <label>
+              <span>Frente / piso</span>
+              <input id="partZone" type="text" placeholder="Piso 2, baño, fachada..." />
+            </label>
+            <label class="field-mode-toggle">
+              <input id="fieldMode" type="checkbox" />
+              <span>Modo móvil</span>
+            </label>
+          </section>
+
           <section class="quick-capture">
             <label>
-              <span>Ingreso rápido</span>
-              <textarea id="quickEntry" rows="2" placeholder="Ej: 23.5 m2 mampostería en ladrillo arquitectónico, fuente Medina"></textarea>
+              <span>Ingreso rápido tipo WhatsApp</span>
+              <textarea id="quickEntry" rows="2" placeholder="Ej: Medina, 27 feb: 23.5 m2 mampostería, 4 und salidas hidráulicas, 12 ml tubería"></textarea>
             </label>
             <div class="quick-actions">
               <button id="parseQuickEntry" type="button">Interpretar</button>
@@ -251,6 +280,17 @@
             <div>
               <span>Plantillas</span>
               <div id="templateAssist" class="assist-chips"></div>
+            </div>
+          </section>
+
+          <section class="field-shortcuts">
+            <div>
+              <span>Favoritos de obra</span>
+              <div id="favoriteAssist" class="assist-list favorite-list"></div>
+            </div>
+            <div>
+              <span>Aprendizajes</span>
+              <div id="aliasAssist" class="assist-chips"></div>
             </div>
           </section>
 
@@ -341,6 +381,7 @@
                   <p>Coincidencias contra las actividades de presupuesto cargadas en este proyecto.</p>
                 </div>
               </div>
+              <div id="ambiguityPanel" class="ambiguity-panel"></div>
               <div id="matchSuggestions" class="match-list"></div>
               <div class="apu-note">
                 <span>Memoria activa</span>
@@ -466,6 +507,6 @@
       </aside>
     </div>
 
-    <script src="./app.js?v=20260505-sprint6-apu-catalog"></script>
+    <script src="./app.js?v=20260505-sprint7-frictionless-ingest"></script>
   </body>
 </html>
