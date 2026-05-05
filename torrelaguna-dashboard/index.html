@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dashboard de obra</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260505-sprint7-frictionless-ingest" />
+    <link rel="stylesheet" href="./styles.css?v=20260505-sprint8-client-weeks" />
   </head>
   <body>
     <div class="app-shell">
@@ -72,6 +72,21 @@
               <strong id="clientExecutedTotal">$0</strong>
             </div>
             <div>
+              <span>Última semana</span>
+              <strong id="clientLatestWeek">$0</strong>
+            </div>
+            <div>
+              <span>Promedio semanal</span>
+              <strong id="clientAverageWeek">$0</strong>
+            </div>
+          </div>
+
+          <section class="client-brief">
+            <div>
+              <span>Lectura de avance</span>
+              <strong id="clientBriefProgress">Cargando lectura...</strong>
+            </div>
+            <div>
               <span>Saldo por ejecutar</span>
               <strong id="clientBalanceTotal">$0</strong>
             </div>
@@ -79,26 +94,27 @@
               <span>Actividades con avance</span>
               <strong id="clientActiveActivities">0</strong>
             </div>
-          </div>
+          </section>
 
           <div class="client-grid">
             <section class="client-block">
               <div class="panel-heading">
                 <div>
-                  <h2>Actas de avance</h2>
-                  <p>Valor ejecutado por corte de obra.</p>
+                  <h2>Avance por semana</h2>
+                  <p>Lectura ejecutiva del ritmo de obra; las actas quedan como soporte técnico.</p>
                 </div>
               </div>
-              <div id="clientActas" class="client-timeline"></div>
+              <div id="clientWeeks" class="client-week-list"></div>
             </section>
 
             <section class="client-block">
               <div class="panel-heading">
                 <div>
-                  <h2>Frentes principales</h2>
-                  <p>Capítulos con mayor avance valorizado.</p>
+                  <h2>Ritmo y frentes</h2>
+                  <p>Semanas clave y capítulos con mayor avance valorizado.</p>
                 </div>
               </div>
+              <div id="clientRhythm" class="client-rhythm"></div>
               <div id="clientChapters" class="client-fronts"></div>
             </section>
           </div>
@@ -507,6 +523,6 @@
       </aside>
     </div>
 
-    <script src="./app.js?v=20260505-sprint7-frictionless-ingest"></script>
+    <script src="./app.js?v=20260505-sprint8-client-weeks"></script>
   </body>
 </html>

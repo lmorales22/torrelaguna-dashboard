@@ -35,7 +35,7 @@ const ALIAS_KEY_PREFIX = "obra-control-alias-memory";
 const DEFAULT_DATA_URL = "./data/torrelaguna.json";
 const DEFAULT_CATALOG_URL = "./data/apu_catalog.json";
 const PACKAGE_SCHEMA_VERSION = "obra-control.v0.3";
-const DASHBOARD_BUILD = "20260505-sprint7-frictionless-ingest";
+const DASHBOARD_BUILD = "20260505-sprint8-client-weeks";
 const DEFAULT_UNITS = ["m2", "ml", "m", "und", "gl", "kg", "m3"];
 const DEFAULT_SOURCES = ["Medina", "Albeiro", "Grillo", "Jairo", "Visita de obra", "Memoria de obra", "Foto soporte"];
 const ENTRY_TEMPLATES = [
@@ -370,56 +370,137 @@ function renderActas() {
   });
 }
 
+function actaSequence(name) {
+  const match = String(name || "").match(/(\d+)/);
+  return match ? Number(match[1]) : 0;
+}
+
+function clientWeekRows(contractTotal, executedTotal) {
+  const directTotal = state.data.actas
+    .filter((acta) => acta.value > 0)
+    .reduce((sum, acta) => sum + (acta.value || 0), 0);
+  const contractFactor = directTotal ? executedTotal / directTotal : 1;
+  let cumulative = 0;
+  return state.data.actas
+    .filter((acta) => acta.value > 0)
+    .sort((a, b) => actaSequence(a.name) - actaSequence(b.name))
+    .map((acta, index) => {
+      const contractValue = (acta.value || 0) * contractFactor;
+      cumulative += contractValue;
+      return {
+        ...acta,
+        week: index + 1,
+        label: `Semana ${index + 1}`,
+        directValue: acta.value || 0,
+        contractValue,
+        cumulative,
+        cumulativeProgress: contractTotal ? cumulative / contractTotal : 0,
+      };
+    });
+}
+
 function renderClient() {
   const { summary, project } = state.data;
-  const actas = state.data.actas.filter((acta) => acta.value > 0);
-  const chapters = state.data.chapters.filter((chapter) => chapter.executed > 0).slice(0, 7);
-  const maxActa = Math.max(...actas.map((acta) => acta.value), 1);
   const contractTotal = summary.contractTotal || summary.budgetTotal;
   const executedTotal = summary.executedContractTotal || summary.executedTotal;
   const balance = Math.max(contractTotal - executedTotal, 0);
+  const weeks = clientWeekRows(contractTotal, executedTotal);
+  const directTotal = weeks.reduce((sum, week) => sum + (week.directValue || 0), 0);
+  const contractFactor = directTotal ? executedTotal / directTotal : 1;
+  const chapters = state.data.chapters
+    .filter((chapter) => chapter.executed > 0)
+    .map((chapter) => ({ ...chapter, displayExecuted: chapter.executed * contractFactor }))
+    .slice(0, 7);
+  const maxWeek = Math.max(...weeks.map((week) => week.contractValue), 1);
+  const latestWeek = weeks[weeks.length - 1];
+  const bestWeek = [...weeks].sort((a, b) => b.contractValue - a.contractValue)[0];
+  const averageWeek = weeks.length ? weeks.reduce((sum, week) => sum + week.contractValue, 0) / weeks.length : 0;
+  const progress = summary.contractProgress || summary.progress || 0;
 
   $("#clientFreshness").textContent = `Corte generado desde ${project.sourceSheet || "CORTES_OBRA"} · ${project.generatedAt || project.updatedAt}`;
-  $("#clientProgressValue").textContent = formatPercent(summary.contractProgress || summary.progress);
+  $("#clientProgressValue").textContent = formatPercent(progress);
   $("#clientContractTotal").textContent = formatMoney(contractTotal);
   $("#clientExecutedTotal").textContent = formatMoney(executedTotal);
+  $("#clientLatestWeek").textContent = formatMoney(latestWeek?.contractValue || 0);
+  $("#clientAverageWeek").textContent = formatMoney(averageWeek);
   $("#clientBalanceTotal").textContent = formatMoney(balance);
   $("#clientActiveActivities").textContent = `${summary.activeActivityCount} / ${summary.activityCount}`;
+  $("#clientBriefProgress").textContent = `${formatPercent(progress)} ejecutado · ${weeks.length} semanas con avance · ${formatMoney(balance)} por ejecutar.`;
   $("#clientUpdatedTotal").textContent = formatMoney(summary.updatedTotal || 0);
   $("#clientNotExecuted").textContent = formatMoney(summary.notExecutedTotal || 0);
   $("#clientAlerts").textContent = activePending().length;
 
-  $("#clientActas").innerHTML = actas
-    .map((acta) => {
-      const width = Math.max((acta.value / maxActa) * 100, 4);
+  $("#clientWeeks").innerHTML = weeks
+    .map((week) => {
+      const width = Math.max((week.contractValue / maxWeek) * 100, 4);
+      const cumulativeWidth = Math.max(Math.min(week.cumulativeProgress * 100, 100), 4);
       return `
-        <button class="client-acta" data-acta="${acta.name}">
-          <span>${acta.name.replace("ACTA DE OBRA ", "Acta ")}</span>
-          <strong>${formatMoney(acta.value)}</strong>
+        <button class="client-week" data-week="${week.week}">
+          <div>
+            <span>${week.label}</span>
+            <small>${week.name.replace("ACTA DE OBRA ", "Acta ")}</small>
+          </div>
+          <strong>${formatMoney(week.contractValue)}</strong>
+          <em>${week.items} actividades · acumulado ${formatPercent(week.cumulativeProgress)}</em>
           <i style="width:${width}%"></i>
+          <b style="width:${cumulativeWidth}%"></b>
         </button>
       `;
     })
     .join("");
 
+  $("#clientRhythm").innerHTML = `
+    <button class="rhythm-item" data-rhythm="latest">
+      <span>Semana reciente</span>
+      <strong>${latestWeek ? latestWeek.label : "Sin avance"}</strong>
+      <small>${latestWeek ? `${formatMoney(latestWeek.contractValue)} · ${latestWeek.items} actividades` : "No hay semanas cargadas"}</small>
+    </button>
+    <button class="rhythm-item" data-rhythm="best">
+      <span>Mayor avance semanal</span>
+      <strong>${bestWeek ? bestWeek.label : "Sin avance"}</strong>
+      <small>${bestWeek ? `${formatMoney(bestWeek.contractValue)} · ${bestWeek.name.replace("ACTA DE OBRA ", "Acta ")}` : "No hay semanas cargadas"}</small>
+    </button>
+    <button class="rhythm-item" data-rhythm="average">
+      <span>Ritmo promedio</span>
+      <strong>${formatMoney(averageWeek)}</strong>
+      <small>${weeks.length} semanas con registro valorizado</small>
+    </button>
+  `;
+
   $("#clientChapters").innerHTML = chapters
     .map((chapter, index) => `
       <button class="client-front" data-chapter-index="${index}">
         <span>${chapter.name}</span>
-        <strong>${formatMoney(chapter.executed)}</strong>
+        <strong>${formatMoney(chapter.displayExecuted)}</strong>
         <small>${chapter.active} actividades · ${formatPercent(chapter.progress)}</small>
       </button>
     `)
     .join("");
 
-  document.querySelectorAll(".client-acta").forEach((button) => {
+  document.querySelectorAll(".client-week").forEach((button) => {
     button.addEventListener("click", () => {
-      const acta = actas.find((item) => item.name === button.dataset.acta);
-      openInspector(acta.name, "Resumen ejecutivo del corte de obra.", [
-        ["Valor directo", formatMoney(acta.value)],
-        ["Actividades", acta.items],
-        ["Registros", acta.movements],
-        ["Cantidad reportada", number.format(acta.quantity)],
+      const week = weeks.find((item) => String(item.week) === button.dataset.week);
+      openInspector(`${week.label} · ${week.name}`, "Resumen ejecutivo semanal leído desde la hoja de cortes.", [
+        ["Valor semanal contractual", formatMoney(week.contractValue)],
+        ["Valor directo leído", formatMoney(week.directValue)],
+        ["Avance acumulado", formatPercent(week.cumulativeProgress)],
+        ["Actividades", week.items],
+        ["Registros", week.movements],
+        ["Cantidad reportada", number.format(week.quantity)],
+      ]);
+    });
+  });
+
+  document.querySelectorAll("[data-rhythm]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const kind = button.dataset.rhythm;
+      const title = kind === "latest" ? "Semana reciente" : kind === "best" ? "Mayor avance semanal" : "Ritmo promedio";
+      const week = kind === "best" ? bestWeek : latestWeek;
+      openInspector(title, "Lectura ejecutiva para conversación con cliente.", [
+        ["Semana", week ? `${week.label} · ${week.name}` : "Sin registro"],
+        ["Valor", kind === "average" ? formatMoney(averageWeek) : formatMoney(week?.contractValue || 0)],
+        ["Semanas leídas", weeks.length],
+        ["Fuente", `${project.sourceWorkbook} · ${project.sourceSheet || "CORTES_OBRA"}`],
       ]);
     });
   });
@@ -428,7 +509,8 @@ function renderClient() {
     button.addEventListener("click", () => {
       const chapter = chapters[Number(button.dataset.chapterIndex)];
       openInspector(chapter.name, "Frente de obra con avance valorizado acumulado.", [
-        ["Ejecutado directo", formatMoney(chapter.executed)],
+        ["Ejecutado contractual", formatMoney(chapter.displayExecuted)],
+        ["Ejecutado directo leído", formatMoney(chapter.executed)],
         ["Presupuesto directo", formatMoney(chapter.budget)],
         ["Avance", formatPercent(chapter.progress)],
         ["Actividades con avance", chapter.active],

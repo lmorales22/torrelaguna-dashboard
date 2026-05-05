@@ -448,7 +448,7 @@ select {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   border-bottom: 1px solid var(--line);
-  margin-bottom: 26px;
+  margin-bottom: 18px;
 }
 
 .client-kpis div {
@@ -465,6 +465,8 @@ select {
 }
 
 .client-kpis span,
+.client-brief span,
+.rhythm-item span,
 .scope-item span {
   display: block;
   color: var(--muted);
@@ -480,6 +482,28 @@ select {
   white-space: nowrap;
 }
 
+.client-brief {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.75fr) minmax(180px, 0.65fr);
+  gap: 1px;
+  margin-bottom: 28px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+
+.client-brief div {
+  min-width: 0;
+  background: #fff;
+  padding: 16px 18px;
+}
+
+.client-brief strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 18px;
+  line-height: 1.28;
+}
+
 .client-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
@@ -491,14 +515,15 @@ select {
   padding-top: 20px;
 }
 
-.client-timeline,
+.client-week-list,
 .client-fronts {
   display: grid;
   gap: 10px;
 }
 
-.client-acta,
+.client-week,
 .client-front,
+.rhythm-item,
 .scope-item {
   appearance: none;
   width: 100%;
@@ -511,31 +536,68 @@ select {
   cursor: pointer;
 }
 
-.client-acta {
+.client-week {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) max-content;
-  gap: 18px;
+  gap: 8px 18px;
 }
 
-.client-acta span,
+.client-week span,
 .client-front span {
   font-weight: 800;
 }
 
-.client-acta strong,
+.client-week strong,
 .client-front strong,
+.rhythm-item strong,
 .scope-item strong {
   font-size: 18px;
 }
 
-.client-acta i {
+.client-week small,
+.client-week em,
+.rhythm-item small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.client-week em {
+  grid-column: 1 / -1;
+}
+
+.client-week i,
+.client-week b {
   position: absolute;
   left: 0;
-  bottom: -1px;
+  height: 3px;
+  border-radius: 999px;
+}
+
+.client-week i {
+  bottom: 2px;
   height: 3px;
   background: var(--accent);
-  border-radius: 999px;
+}
+
+.client-week b {
+  bottom: -3px;
+  background: rgba(36, 118, 94, 0.22);
+}
+
+.client-rhythm {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.rhythm-item {
+  display: grid;
+  gap: 5px;
+  padding: 13px 0 14px;
 }
 
 .client-front {
@@ -1689,6 +1751,7 @@ tbody tr {
   .overview-layout,
   .client-hero,
   .client-kpis,
+  .client-brief,
   .client-grid,
   .ingest-status,
   .daily-context,
@@ -1718,6 +1781,7 @@ tbody tr {
 
   .client-kpis div,
   .client-kpis div + div,
+  .client-brief div,
   .ingest-status div,
   .ingest-status div + div {
     padding-left: 0;
@@ -1725,7 +1789,7 @@ tbody tr {
     border-bottom: 1px solid var(--line);
   }
 
-  .client-acta,
+  .client-week,
   .client-front,
   .movement-row,
   .movement-buckets,
