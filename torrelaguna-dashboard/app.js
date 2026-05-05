@@ -24,6 +24,8 @@ const number = new Intl.NumberFormat("es-CO", {
 const $ = (selector) => document.querySelector(selector);
 const DECISION_KEY = "torrelaguna-field-alert-decisions";
 const MOVEMENT_KEY_PREFIX = "obra-control-local-movements";
+const PACKAGE_SCHEMA_VERSION = "obra-control.v0.3";
+const DASHBOARD_BUILD = "20260505-sprint3-handoff";
 const STOP_WORDS = new Set([
   "con",
   "para",
@@ -911,6 +913,17 @@ function movementBucketKey(movement) {
   return "review";
 }
 
+function movementBucketCounts() {
+  return state.movements.reduce(
+    (acc, movement) => {
+      acc.all += 1;
+      acc[movementBucketKey(movement)] += 1;
+      return acc;
+    },
+    { all: 0, confirmed: 0, review: 0, quantity: 0, additional: 0 }
+  );
+}
+
 function filteredMovements() {
   if (state.movementFilter === "all") return state.movements;
   return state.movements.filter((movement) => movementBucketKey(movement) === state.movementFilter);
@@ -919,12 +932,13 @@ function filteredMovements() {
 function renderMovementBuckets() {
   const target = $("#movementBuckets");
   if (!target) return;
+  const counts = movementBucketCounts();
   const buckets = [
-    ["all", "Todos", state.movements.length],
-    ["confirmed", "Listos", state.movements.filter((item) => movementBucketKey(item) === "confirmed").length],
-    ["review", "Revisión", state.movements.filter((item) => movementBucketKey(item) === "review").length],
-    ["quantity", "Cantidad", state.movements.filter((item) => movementBucketKey(item) === "quantity").length],
-    ["additional", "Adicionales", state.movements.filter((item) => movementBucketKey(item) === "additional").length],
+    ["all", "Todos", counts.all],
+    ["confirmed", "Listos", counts.confirmed],
+    ["review", "Revisión", counts.review],
+    ["quantity", "Cantidad", counts.quantity],
+    ["additional", "Adicionales", counts.additional],
   ];
   target.innerHTML = buckets
     .map(([key, label, count]) => `
@@ -1041,21 +1055,13 @@ function renderIngestion() {
   });
 
   renderDraftSummary();
+  renderHandoffSummary();
 }
 
 function renderDraftSummary() {
   const target = $("#draftSummary");
   if (!target) return;
-  const groups = state.movements.reduce((acc, movement) => {
-    const key = movement.acta || "Sin acta";
-    acc[key] ||= { acta: key, count: 0, confirmed: 0, pending: 0, value: 0 };
-    acc[key].count += 1;
-    acc[key].value += movement.simulatedValue || 0;
-    if (movement.status === "CONFIRMADO") acc[key].confirmed += 1;
-    else acc[key].pending += 1;
-    return acc;
-  }, {});
-  const rows = Object.values(groups);
+  const rows = draftRows();
   target.innerHTML = rows.length
     ? rows
         .map((row) => `
@@ -1072,6 +1078,49 @@ function renderDraftSummary() {
         `)
         .join("")
     : `<p class="empty">Guarda movimientos para ver el borrador de acta.</p>`;
+}
+
+function draftRows() {
+  const groups = state.movements.reduce((acc, movement) => {
+    const key = movement.acta || "Sin acta";
+    acc[key] ||= { acta: key, count: 0, confirmed: 0, pending: 0, value: 0 };
+    acc[key].count += 1;
+    acc[key].value += movement.simulatedValue || 0;
+    if (movement.status === "CONFIRMADO") acc[key].confirmed += 1;
+    else acc[key].pending += 1;
+    return acc;
+  }, {});
+  return Object.values(groups);
+}
+
+function renderHandoffSummary() {
+  const target = $("#handoffSummary");
+  if (!target) return;
+  const payload = buildHandoffPackage();
+  const readySignals = [
+    ["Esquema", payload.schemaVersion],
+    ["Movimientos", payload.counts.all],
+    ["Listos", payload.counts.confirmed],
+    ["Por revisar", payload.counts.review + payload.counts.quantity + payload.counts.additional],
+    ["Feedback", payload.movements.filter((movement) => movement.architectFeedback).length],
+    ["Valor paquete", formatMoney(payload.totals.simulatedValue)],
+  ];
+  target.innerHTML = `
+    <div class="handoff-grid">
+      ${readySignals
+        .map(([label, value]) => `
+          <div>
+            <span>${label}</span>
+            <strong>${value}</strong>
+          </div>
+        `)
+        .join("")}
+    </div>
+    <div class="handoff-note">
+      <strong>Contrato de migración</strong>
+      <span>El paquete exportado incluye proyecto, resumen, borrador de actas, movimientos, candidatos, feedback y decisiones locales. Sigue usando localStorage hasta conectar una base compartida.</span>
+    </div>
+  `;
 }
 
 function renderActivities() {
@@ -1247,20 +1296,79 @@ function exportDecisions() {
   URL.revokeObjectURL(url);
 }
 
-function exportMovements() {
-  const payload = {
+function buildHandoffPackage() {
+  const counts = movementBucketCounts();
+  const decisions = decisionEntries().map(([key, decision]) => ({ key, ...decision }));
+  const totals = {
+    simulatedValue: state.movements.reduce((sum, movement) => sum + (movement.simulatedValue || 0), 0),
+    confirmedValue: state.movements
+      .filter((movement) => movement.status === "CONFIRMADO")
+      .reduce((sum, movement) => sum + (movement.simulatedValue || 0), 0),
+    pendingValue: state.movements
+      .filter((movement) => movement.status !== "CONFIRMADO")
+      .reduce((sum, movement) => sum + (movement.simulatedValue || 0), 0),
+  };
+  return {
+    schemaVersion: PACKAGE_SCHEMA_VERSION,
+    dashboardBuild: DASHBOARD_BUILD,
     project: state.data.project,
     exportedAt: new Date().toISOString(),
-    note: "Prototipo de ingreso. No modifica el Excel fuente.",
+    source: {
+      workbook: state.data.project.sourceWorkbook,
+      sheet: state.data.project.sourceSheet,
+      note: "Paquete generado desde prototipo estático. No modifica el Excel fuente.",
+    },
+    counts,
+    totals,
+    actaDrafts: draftRows(),
+    localStorageKeys: {
+      movements: movementStorageKey(),
+      decisions: DECISION_KEY,
+    },
+    decisions,
     movements: state.movements,
   };
+}
+
+function exportMovements() {
+  const payload = buildHandoffPackage();
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "obra-movimientos-corte-prototipo.json";
+  link.download = "obra-control-paquete-migracion.json";
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function packageSummaryText(payload = buildHandoffPackage()) {
+  return [
+    `Proyecto: ${payload.project.name}`,
+    `Esquema: ${payload.schemaVersion}`,
+    `Fuente: ${payload.source.workbook} · ${payload.source.sheet}`,
+    `Movimientos: ${payload.counts.all}`,
+    `Listos: ${payload.counts.confirmed}`,
+    `Revisión: ${payload.counts.review}`,
+    `Cantidad: ${payload.counts.quantity}`,
+    `Adicionales: ${payload.counts.additional}`,
+    `Valor simulado: ${formatMoney(payload.totals.simulatedValue)}`,
+    `Feedback registrado: ${payload.movements.filter((movement) => movement.architectFeedback).length}`,
+  ].join("\n");
+}
+
+async function copyPackageSummary() {
+  const text = packageSummaryText();
+  try {
+    await navigator.clipboard.writeText(text);
+    openInspector("Resumen copiado", "El resumen del paquete quedó listo para pegarlo en un mensaje de seguimiento.", [
+      ["Movimientos", state.movements.length],
+      ["Destino sugerido", "Chat, correo o handoff de migración"],
+    ]);
+  } catch {
+    openInspector("Resumen del paquete", text, [
+      ["Nota", "El navegador no permitió copiar automáticamente."],
+    ]);
+  }
 }
 
 function importMovements(file) {
@@ -1380,6 +1488,7 @@ function bindEvents() {
   $("#exportDecisions").addEventListener("click", exportDecisions);
   $("#clearDecisions").addEventListener("click", clearDecisions);
   $("#exportMovements")?.addEventListener("click", exportMovements);
+  $("#copyPackageSummary")?.addEventListener("click", copyPackageSummary);
   $("#clearMovements")?.addEventListener("click", clearMovements);
   $("#importMovements")?.addEventListener("click", () => $("#movementImportFile")?.click());
   $("#movementImportFile")?.addEventListener("change", (event) => {

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Torre Laguna | Dashboard de obra</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260505-sprint2-feedback" />
+    <link rel="stylesheet" href="./styles.css?v=20260505-sprint3-handoff" />
   </head>
   <body>
     <div class="app-shell">
@@ -330,13 +330,24 @@
               </div>
               <div class="ledger-actions">
                 <button id="importMovements" type="button">Importar JSON</button>
-                <button id="exportMovements" type="button">Exportar JSON</button>
+                <button id="exportMovements" type="button">Exportar paquete</button>
+                <button id="copyPackageSummary" type="button">Copiar resumen</button>
                 <button id="clearMovements" type="button">Vaciar</button>
                 <input id="movementImportFile" type="file" accept="application/json,.json" hidden />
               </div>
             </div>
             <div id="movementBuckets" class="movement-buckets"></div>
             <div id="movementLedger" class="movement-ledger"></div>
+          </section>
+
+          <section class="handoff-section">
+            <div class="panel-heading">
+              <div>
+                <h2>Preparación para migración</h2>
+                <p>Estado del paquete que mañana puede pasar a una base compartida o backend.</p>
+              </div>
+            </div>
+            <div id="handoffSummary" class="handoff-summary"></div>
           </section>
 
           <section class="draft-section">
@@ -428,6 +439,6 @@
       </aside>
     </div>
 
-    <script src="./app.js?v=20260505-sprint2-feedback"></script>
+    <script src="./app.js?v=20260505-sprint3-handoff"></script>
   </body>
 </html>
