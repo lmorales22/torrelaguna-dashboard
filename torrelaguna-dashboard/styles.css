@@ -598,6 +598,59 @@ select {
   line-height: 1;
 }
 
+.quick-capture {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 12px;
+  align-items: stretch;
+  margin-bottom: 24px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.quick-capture label {
+  display: grid;
+  gap: 7px;
+}
+
+.quick-capture span {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.quick-capture textarea {
+  width: 100%;
+  min-height: 58px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 6px;
+  padding: 11px 12px;
+  resize: vertical;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.quick-capture button {
+  appearance: none;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: #fff;
+  border-radius: 6px;
+  min-height: 34px;
+  padding: 0 18px;
+  cursor: pointer;
+}
+
+.quick-capture button + button {
+  background: #fff;
+  color: var(--ink);
+}
+
 .ingest-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
@@ -683,6 +736,36 @@ select {
   display: block;
   margin-top: 8px;
   color: var(--muted);
+}
+
+.validation-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.validation-item {
+  padding: 9px 12px;
+  border-left: 3px solid var(--line);
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.validation-item.ok {
+  border-left-color: var(--accent);
+  color: var(--accent-dark);
+}
+
+.validation-item.warn {
+  border-left-color: var(--warn);
+  color: var(--warn);
+}
+
+.validation-item.danger {
+  border-left-color: var(--danger);
+  color: var(--danger);
 }
 
 .entry-actions,
@@ -782,6 +865,12 @@ select {
   margin-top: 34px;
 }
 
+.draft-section {
+  margin-top: 28px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+
 .movement-ledger {
   display: grid;
   gap: 1px;
@@ -800,6 +889,26 @@ select {
 }
 
 .movement-row strong {
+  line-height: 1.25;
+}
+
+.draft-summary {
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border-top: 1px solid var(--line);
+}
+
+.draft-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 18px;
+  align-items: center;
+  background: var(--paper);
+  padding: 15px 0;
+}
+
+.draft-row strong {
   line-height: 1.25;
 }
 
@@ -1222,6 +1331,7 @@ tbody tr {
   .client-grid,
   .ingest-status,
   .ingest-layout,
+  .quick-capture,
   .form-grid,
   .scope-strip,
   .split-values,

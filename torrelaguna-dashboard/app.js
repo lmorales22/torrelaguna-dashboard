@@ -414,6 +414,50 @@ function entryValues() {
   };
 }
 
+function parseQuickEntry(options = {}) {
+  const raw = ($("#quickEntry")?.value || "").trim();
+  if (!raw) return;
+  const quantityMatch = raw.match(/(-?\d+(?:[.,]\d+)?)\s*(m2|m²|m3|m³|ml|und|un|u|gl|kg|m)\b/i);
+  const sourceMatch = raw.match(/\b(?:fuente|procedencia|soporte|contratista)\s*[:\-]?\s*([^,;]+)/i);
+  const typeMatch = raw.match(/\b(adicional|correcci[oó]n|no ejecutado|avance)\b/i);
+  let description = raw;
+
+  if (quantityMatch) {
+    $("#entryQuantity").value = quantityMatch[1].replace(",", ".");
+    $("#entryUnit").value = quantityMatch[2]
+      .toLowerCase()
+      .replace("m²", "m2")
+      .replace("m³", "m3")
+      .replace(/^un$|^u$/, "und");
+    description = description.replace(quantityMatch[0], "");
+  }
+  if (sourceMatch) {
+    $("#entrySource").value = sourceMatch[1].trim();
+    description = description.replace(sourceMatch[0], "");
+  }
+  if (typeMatch) {
+    const normalizedType = normalizeLoose(typeMatch[1]);
+    $("#entryType").value =
+      normalizedType.includes("adicional")
+        ? "adicional"
+        : normalizedType.includes("correccion")
+          ? "correccion"
+          : normalizedType.includes("no ejecutado")
+            ? "no_ejecutado"
+            : "avance";
+    description = description.replace(typeMatch[0], "");
+  }
+
+  description = description.replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, "").replace(/\s+/g, " ");
+  if (description) $("#entryDescription").value = description;
+  state.selectedMatchRow = null;
+  autoSelectClearMatch();
+  renderIngestion();
+  if (options.autoSave === true) {
+    autoSaveClearEntry();
+  }
+}
+
 function scoreActivity(activity, entry) {
   const descriptionTokens = tokensFor(entry.description);
   const unit = normalizeLoose(entry.unit);
@@ -453,6 +497,53 @@ function matchSuggestions(entry) {
     .slice(0, 7);
 }
 
+function clearMatchCandidate(entry = entryValues(), suggestions = matchSuggestions(entry)) {
+  const best = suggestions[0];
+  if (!best) return null;
+  const next = suggestions[1];
+  const unitMatches =
+    entry.unit && normalizeLoose(entry.unit) === normalizeLoose(best.activity.unit);
+  const unambiguousGap = !next || best.score - next.score >= 16;
+  const isClear =
+    entry.type !== "adicional" &&
+    entry.description &&
+    entry.quantity > 0 &&
+    unitMatches &&
+    best.score >= 78 &&
+    unambiguousGap;
+  return isClear ? best : null;
+}
+
+function autoSelectClearMatch() {
+  const entry = entryValues();
+  const clear = clearMatchCandidate(entry);
+  if (clear) {
+    state.selectedMatchRow = clear.activity.row;
+  }
+  return clear;
+}
+
+function autoSaveClearEntry() {
+  const clear = autoSelectClearMatch();
+  renderIngestion();
+  if (!clear) {
+    openInspector("Revisión necesaria", "No guardé automáticamente porque la coincidencia no es suficientemente clara o hay una alerta de unidad/cantidad.", [
+      ["Acción", "Selecciona una sugerencia o guarda como pendiente."],
+    ]);
+    return;
+  }
+  const entry = entryValues();
+  if (entry.type === "avance" && entry.quantity > Math.max(clear.activity.balanceQty || 0, 0)) {
+    openInspector("Cantidad por revisar", "Preseleccioné el ítem, pero no guardé automáticamente porque la cantidad supera el saldo visible de la matriz.", [
+      ["Ítem sugerido", `${clear.activity.item} · ${clear.activity.description}`],
+      ["Cantidad reportada", `${number.format(entry.quantity)} ${entry.unit}`],
+      ["Saldo visible", `${number.format(clear.activity.balanceQty)} ${clear.activity.unit}`],
+    ]);
+    return;
+  }
+  createMovement(false);
+}
+
 function selectedActivity() {
   if (!state.selectedMatchRow) return null;
   return state.data.activities.find((activity) => String(activity.row) === String(state.selectedMatchRow));
@@ -473,6 +564,38 @@ function movementValue(activity, entry) {
   if (!activity || !entry.quantity) return 0;
   const sign = entry.type === "no_ejecutado" ? -1 : 1;
   return sign * entry.quantity * (activity.unitPrice || 0);
+}
+
+function validationMessages(activity, entry, suggestions) {
+  const messages = [];
+  if (!entry.description) {
+    messages.push(["danger", "Falta la actividad reportada en campo."]);
+  }
+  if (!entry.quantity || entry.quantity <= 0) {
+    messages.push(["danger", "Falta una cantidad mayor que cero."]);
+  }
+  if (!entry.unit) {
+    messages.push(["warn", "Falta la unidad reportada; sin unidad es difícil auditar el movimiento."]);
+  }
+  if (!activity && entry.type !== "adicional") {
+    messages.push(["warn", "No hay ítem confirmado. Puede guardarse como pendiente, no como cargado."]);
+  }
+  if (activity && selectedUnitMismatch(activity, entry)) {
+    messages.push(["warn", `La unidad reportada (${entry.unit}) no coincide con la matriz (${activity.unit}).`]);
+  }
+  if (activity && entry.type === "avance" && entry.quantity > Math.max(activity.balanceQty || 0, 0)) {
+    messages.push(["warn", `La cantidad supera el saldo presupuestal visible (${number.format(activity.balanceQty)} ${activity.unit}).`]);
+  }
+  if (!activity && suggestions.length > 1 && suggestions[0].score - suggestions[1].score < 18) {
+    messages.push(["warn", "Hay varias actividades parecidas. Conviene pedir confirmación antes de cargar."]);
+  }
+  if (entry.type === "adicional") {
+    messages.push(["ok", "Se tratará como posible adicional y deberá pasar por revisión/APU antes de cargarse formalmente."]);
+  }
+  if (!messages.length) {
+    messages.push(["ok", "Movimiento listo para guardar como confirmado en esta maqueta."]);
+  }
+  return messages;
 }
 
 function createMovement(forcePending = false) {
@@ -525,13 +648,13 @@ function createMovement(forcePending = false) {
   $("#entryForm").reset();
   setDefaultEntryDate();
   renderIngestion();
-  openInspector(status, movement.reportedDescription || movement.activity?.description || "Movimiento guardado.", [
+  openInspector(statusLabel(status), movement.reportedDescription || movement.activity?.description || "Movimiento guardado.", [
     ["Acta", movement.acta],
     ["Cantidad", `${number.format(movement.quantity)} ${movement.unit || ""}`],
     ["Ítem destino", movement.activity ? `${movement.activity.item} · ${movement.activity.description}` : "Pendiente"],
     ["Valor simulado", formatMoney(movement.simulatedValue)],
     ["Fuente", movement.source || "Sin fuente"],
-  ]);
+  ], movementActions(movement));
 }
 
 function setDefaultEntryDate() {
@@ -558,11 +681,85 @@ function movementStatusClass(status) {
   return "danger";
 }
 
+function mutateMovement(id, updater) {
+  state.movements = state.movements.map((movement) =>
+    movement.id === id ? updater({ ...movement }) : movement
+  );
+  saveMovements();
+  renderIngestion();
+}
+
+function deleteMovement(id) {
+  state.movements = state.movements.filter((movement) => movement.id !== id);
+  saveMovements();
+  renderIngestion();
+  closeInspector();
+}
+
+function duplicateMovement(id) {
+  const movement = state.movements.find((item) => item.id === id);
+  if (!movement) return;
+  state.movements.unshift({
+    ...movement,
+    id: `mov-${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    note: [movement.note, "Duplicado desde bandeja."].filter(Boolean).join(" "),
+  });
+  saveMovements();
+  renderIngestion();
+}
+
+function movementActions(movement) {
+  const actions = [
+    {
+      id: "movement-review",
+      label: "Marcar para revisar",
+      kind: "secondary",
+      onClick: () =>
+        mutateMovement(movement.id, (item) => ({
+          ...item,
+          status: "PENDIENTE_REVISION",
+          reviewedAt: new Date().toISOString(),
+        })),
+    },
+    {
+      id: "movement-duplicate",
+      label: "Duplicar movimiento",
+      kind: "secondary",
+      onClick: () => duplicateMovement(movement.id),
+    },
+    {
+      id: "movement-delete",
+      label: "Eliminar movimiento local",
+      kind: "danger",
+      onClick: () => deleteMovement(movement.id),
+    },
+  ];
+  if (movement.activity && movement.status !== "CONFIRMADO") {
+    actions.unshift({
+      id: "movement-confirm",
+      label: "Confirmar movimiento",
+      onClick: () =>
+        mutateMovement(movement.id, (item) => ({
+          ...item,
+          status: "CONFIRMADO",
+          reviewedAt: new Date().toISOString(),
+        })),
+    });
+  }
+  return actions;
+}
+
 function renderIngestion() {
   if (!$("#entryForm")) return;
   const entry = entryValues();
   const suggestions = matchSuggestions(entry);
+  if (!state.selectedMatchRow) {
+    const clear = clearMatchCandidate(entry, suggestions);
+    if (clear) state.selectedMatchRow = clear.activity.row;
+  }
   const activity = selectedActivity();
+  const validations = validationMessages(activity, entry, suggestions);
   const pendingCount = state.movements.filter((movement) => movement.status !== "CONFIRMADO").length;
   const total = state.movements.reduce((sum, movement) => sum + (movement.simulatedValue || 0), 0);
 
@@ -608,6 +805,10 @@ function renderIngestion() {
     });
   });
 
+  $("#entryValidation").innerHTML = validations
+    .map(([kind, message]) => `<div class="validation-item ${kind}">${message}</div>`)
+    .join("");
+
   $("#movementLedger").innerHTML =
     state.movements.length
       ? state.movements
@@ -638,9 +839,42 @@ function renderIngestion() {
         ["Valor simulado", formatMoney(movement.simulatedValue)],
         ["Fuente", movement.source || "Sin fuente"],
         ["Observación", movement.note || "Sin observación"],
-      ]);
+      ], movementActions(movement));
     });
   });
+
+  renderDraftSummary();
+}
+
+function renderDraftSummary() {
+  const target = $("#draftSummary");
+  if (!target) return;
+  const groups = state.movements.reduce((acc, movement) => {
+    const key = movement.acta || "Sin acta";
+    acc[key] ||= { acta: key, count: 0, confirmed: 0, pending: 0, value: 0 };
+    acc[key].count += 1;
+    acc[key].value += movement.simulatedValue || 0;
+    if (movement.status === "CONFIRMADO") acc[key].confirmed += 1;
+    else acc[key].pending += 1;
+    return acc;
+  }, {});
+  const rows = Object.values(groups);
+  target.innerHTML = rows.length
+    ? rows
+        .map((row) => `
+          <article class="draft-row">
+            <div>
+              <strong>${row.acta}</strong>
+              <span class="row-meta">${row.confirmed} confirmados · ${row.pending} pendientes</span>
+            </div>
+            <div>
+              <strong>${formatMoney(row.value)}</strong>
+              <span class="row-meta">${row.count} movimientos</span>
+            </div>
+          </article>
+        `)
+        .join("")
+    : `<p class="empty">Guarda movimientos para ver el borrador de acta.</p>`;
 }
 
 function renderActivities() {
@@ -832,6 +1066,35 @@ function exportMovements() {
   URL.revokeObjectURL(url);
 }
 
+function importMovements(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const payload = JSON.parse(reader.result);
+      const incoming = Array.isArray(payload) ? payload : payload.movements;
+      if (!Array.isArray(incoming)) throw new Error("El JSON no contiene una lista de movimientos.");
+      const stamped = incoming.map((movement, index) => ({
+        ...movement,
+        id: movement.id || `import-${Date.now()}-${index}`,
+        importedAt: new Date().toISOString(),
+      }));
+      state.movements = [...stamped, ...state.movements];
+      saveMovements();
+      renderIngestion();
+      openInspector("Movimientos importados", "El JSON se cargó en la bandeja local de este navegador.", [
+        ["Movimientos", stamped.length],
+        ["Excel fuente", "Sin cambios"],
+      ]);
+    } catch (error) {
+      openInspector("No se pudo importar", error.message, [
+        ["Archivo", file.name],
+      ]);
+    }
+  };
+  reader.readAsText(file);
+}
+
 function clearDecisions() {
   state.decisions = {};
   saveDecisions();
@@ -921,6 +1184,18 @@ function bindEvents() {
   $("#clearDecisions").addEventListener("click", clearDecisions);
   $("#exportMovements")?.addEventListener("click", exportMovements);
   $("#clearMovements")?.addEventListener("click", clearMovements);
+  $("#importMovements")?.addEventListener("click", () => $("#movementImportFile")?.click());
+  $("#movementImportFile")?.addEventListener("change", (event) => {
+    importMovements(event.target.files?.[0]);
+    event.target.value = "";
+  });
+  $("#parseQuickEntry")?.addEventListener("click", parseQuickEntry);
+  $("#autoSaveQuickEntry")?.addEventListener("click", () => parseQuickEntry({ autoSave: true }));
+  $("#quickEntry")?.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      parseQuickEntry({ autoSave: event.shiftKey });
+    }
+  });
 
   $("#entryForm")?.addEventListener("submit", (event) => {
     event.preventDefault();

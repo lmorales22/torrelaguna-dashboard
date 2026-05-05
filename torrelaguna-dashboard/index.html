@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Torre Laguna | Dashboard de obra</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260505-sprint1" />
   </head>
   <body>
     <div class="app-shell">
@@ -227,6 +227,17 @@
             </div>
           </div>
 
+          <section class="quick-capture">
+            <label>
+              <span>Ingreso rápido</span>
+              <textarea id="quickEntry" rows="2" placeholder="Ej: 23.5 m2 mampostería en ladrillo arquitectónico, fuente Medina"></textarea>
+            </label>
+            <div class="quick-actions">
+              <button id="parseQuickEntry" type="button">Interpretar</button>
+              <button id="autoSaveQuickEntry" type="button">Guardar claro</button>
+            </div>
+          </section>
+
           <div class="ingest-layout">
             <form class="entry-form" id="entryForm">
               <div class="form-head">
@@ -286,6 +297,8 @@
                 <strong>Selecciona una sugerencia para poder guardar como confirmado.</strong>
               </div>
 
+              <div class="validation-list" id="entryValidation"></div>
+
               <div class="entry-actions">
                 <button type="submit">Guardar movimiento</button>
                 <button type="button" id="saveAsPending" class="secondary-button">Guardar pendiente</button>
@@ -315,11 +328,23 @@
                 <p>Datos guardados localmente en este navegador. Sirven como maqueta de ingreso, no modifican Excel.</p>
               </div>
               <div class="ledger-actions">
+                <button id="importMovements" type="button">Importar JSON</button>
                 <button id="exportMovements" type="button">Exportar JSON</button>
                 <button id="clearMovements" type="button">Vaciar</button>
+                <input id="movementImportFile" type="file" accept="application/json,.json" hidden />
               </div>
             </div>
             <div id="movementLedger" class="movement-ledger"></div>
+          </section>
+
+          <section class="draft-section">
+            <div class="panel-heading">
+              <div>
+                <h2>Acta simulada</h2>
+                <p>Resumen generado desde los movimientos locales antes de migrar a una base compartida.</p>
+              </div>
+            </div>
+            <div id="draftSummary" class="draft-summary"></div>
           </section>
         </section>
 
@@ -401,6 +426,6 @@
       </aside>
     </div>
 
-    <script src="./app.js"></script>
+    <script src="./app.js?v=20260505-sprint1"></script>
   </body>
 </html>
