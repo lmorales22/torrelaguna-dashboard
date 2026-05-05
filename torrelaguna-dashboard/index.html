@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dashboard de obra</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260505-sprint8-client-weeks" />
+    <link rel="stylesheet" href="./styles.css?v=20260505-sprint9-exportables-v3" />
   </head>
   <body>
     <div class="app-shell">
@@ -39,6 +39,11 @@
             <h1 id="workspaceTitle">Dashboard de campo</h1>
           </div>
           <div class="topbar-actions">
+            <div class="export-actions" aria-label="Exportables">
+              <button id="exportClientPdf" type="button">PDF cliente</button>
+              <button id="exportClientExcel" type="button">Excel cliente</button>
+              <button id="exportOpsExcel" type="button">Excel operativo</button>
+            </div>
             <label class="search">
               <span>Buscar</span>
               <input id="searchInput" type="search" placeholder="Ítem, actividad, fuente..." />
@@ -523,6 +528,6 @@
       </aside>
     </div>
 
-    <script src="./app.js?v=20260505-sprint8-client-weeks"></script>
+    <script src="./app.js?v=20260505-sprint9-exportables-v3"></script>
   </body>
 </html>

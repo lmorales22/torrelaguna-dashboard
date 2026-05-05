@@ -197,6 +197,46 @@ h2 {
   display: flex;
   align-items: end;
   gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 430px;
+}
+
+.export-actions button {
+  appearance: none;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  padding: 0 12px;
+  cursor: pointer;
+  transition: border-color 180ms ease, color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.export-actions button:first-child {
+  background: var(--brand-black);
+  border-color: var(--brand-black);
+  color: #fff;
+}
+
+.export-actions button:hover {
+  border-color: var(--accent);
+  color: var(--accent-dark);
+  transform: translateY(-1px);
+}
+
+.export-actions button:first-child:hover {
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+  color: #fff;
 }
 
 .search {
@@ -1609,11 +1649,11 @@ tbody tr {
 
 .inspector {
   position: fixed;
-  top: 18px;
+  top: 96px;
   right: 18px;
   z-index: 10;
   width: min(420px, calc(100vw - 36px));
-  max-height: calc(100vh - 36px);
+  max-height: calc(100vh - 114px);
   overflow: auto;
   background: #fff;
   border: 1px solid var(--line);
@@ -1811,7 +1851,21 @@ tbody tr {
   }
 
   .search input,
-  select {
+  select,
+  .export-actions {
     min-width: 100%;
+  }
+
+  .export-actions {
+    justify-content: stretch;
+  }
+
+  .export-actions button {
+    flex: 1 1 150px;
+  }
+
+  .inspector {
+    top: 18px;
+    max-height: calc(100vh - 36px);
   }
 }

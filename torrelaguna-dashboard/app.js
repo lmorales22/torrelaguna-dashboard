@@ -35,7 +35,7 @@ const ALIAS_KEY_PREFIX = "obra-control-alias-memory";
 const DEFAULT_DATA_URL = "./data/torrelaguna.json";
 const DEFAULT_CATALOG_URL = "./data/apu_catalog.json";
 const PACKAGE_SCHEMA_VERSION = "obra-control.v0.3";
-const DASHBOARD_BUILD = "20260505-sprint8-client-weeks";
+const DASHBOARD_BUILD = "20260505-sprint9-exportables-v3";
 const DEFAULT_UNITS = ["m2", "ml", "m", "und", "gl", "kg", "m3"];
 const DEFAULT_SOURCES = ["Medina", "Albeiro", "Grillo", "Jairo", "Visita de obra", "Memoria de obra", "Foto soporte"];
 const ENTRY_TEMPLATES = [
@@ -268,12 +268,15 @@ function openInspector(title, body, meta = [], actions = []) {
   $("#inspectorBody").textContent = body;
   $("#inspectorMeta").innerHTML = meta
     .map(
-      ([label, value]) => `
+      ([label, value]) => {
+        const displayValue = value === 0 || value === false ? String(value) : value || "Sin dato";
+        return `
         <div class="meta-line">
           <span>${label}</span>
-          <strong>${value || "Sin dato"}</strong>
+          <strong>${displayValue}</strong>
         </div>
-      `
+      `;
+      }
     )
     .join("");
   $("#inspectorActions").innerHTML = actions
@@ -399,7 +402,7 @@ function clientWeekRows(contractTotal, executedTotal) {
     });
 }
 
-function renderClient() {
+function clientReportModel() {
   const { summary, project } = state.data;
   const contractTotal = summary.contractTotal || summary.budgetTotal;
   const executedTotal = summary.executedContractTotal || summary.executedTotal;
@@ -416,6 +419,38 @@ function renderClient() {
   const bestWeek = [...weeks].sort((a, b) => b.contractValue - a.contractValue)[0];
   const averageWeek = weeks.length ? weeks.reduce((sum, week) => sum + week.contractValue, 0) / weeks.length : 0;
   const progress = summary.contractProgress || summary.progress || 0;
+
+  return {
+    summary,
+    project,
+    contractTotal,
+    executedTotal,
+    balance,
+    weeks,
+    chapters,
+    maxWeek,
+    latestWeek,
+    bestWeek,
+    averageWeek,
+    progress,
+  };
+}
+
+function renderClient() {
+  const {
+    summary,
+    project,
+    contractTotal,
+    executedTotal,
+    balance,
+    weeks,
+    chapters,
+    maxWeek,
+    latestWeek,
+    bestWeek,
+    averageWeek,
+    progress,
+  } = clientReportModel();
 
   $("#clientFreshness").textContent = `Corte generado desde ${project.sourceSheet || "CORTES_OBRA"} · ${project.generatedAt || project.updatedAt}`;
   $("#clientProgressValue").textContent = formatPercent(progress);
@@ -2034,6 +2069,669 @@ function exportMovements() {
   URL.revokeObjectURL(url);
 }
 
+function reportTimestamp(date = new Date()) {
+  return date.toLocaleString("es-CO", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function fileDateStamp(date = new Date()) {
+  return localDateString(date);
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function xmlEscape(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function excelCell(value, style = "") {
+  return { value, style };
+}
+
+function excelHeader(values) {
+  return values.map((value) => excelCell(value, "Header"));
+}
+
+function excelCellXml(input) {
+  const cell = input && typeof input === "object" && Object.prototype.hasOwnProperty.call(input, "value")
+    ? input
+    : { value: input, style: "" };
+  const value = cell.value ?? "";
+  const isNumber = typeof value === "number" && Number.isFinite(value);
+  const type = isNumber ? "Number" : "String";
+  const style = cell.style ? ` ss:StyleID="${cell.style}"` : "";
+  return `<Cell${style}><Data ss:Type="${type}">${xmlEscape(value)}</Data></Cell>`;
+}
+
+function safeExcelSheetName(name, index = 0) {
+  const cleaned = String(name || `Hoja ${index + 1}`)
+    .replace(/[\\/?*[\]:]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.slice(0, 31) || `Hoja ${index + 1}`;
+}
+
+function worksheetXml(sheet, index) {
+  const rows = sheet.rows
+    .map((row) => {
+      if (!row || !row.length) return "<Row/>";
+      return `<Row>${row.map(excelCellXml).join("")}</Row>`;
+    })
+    .join("");
+  const columns = (sheet.widths || [])
+    .map((width) => `<Column ss:Width="${Number(width) || 96}"/>`)
+    .join("");
+  return `
+    <Worksheet ss:Name="${xmlEscape(safeExcelSheetName(sheet.name, index))}">
+      <Table>${columns}${rows}</Table>
+    </Worksheet>
+  `;
+}
+
+function workbookXml(worksheets) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook
+  xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:x="urn:schemas-microsoft-com:office:excel"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:html="http://www.w3.org/TR/REC-html40">
+  <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
+    <Author>Tottem Architecture</Author>
+    <Company>Tottem Architecture</Company>
+    <Created>${new Date().toISOString()}</Created>
+  </DocumentProperties>
+  <Styles>
+    <Style ss:ID="Default" ss:Name="Normal">
+      <Alignment ss:Vertical="Top"/>
+      <Font ss:FontName="Arial" ss:Size="10" ss:Color="#111512"/>
+    </Style>
+    <Style ss:ID="Title">
+      <Font ss:FontName="Arial" ss:Size="16" ss:Bold="1" ss:Color="#111512"/>
+    </Style>
+    <Style ss:ID="Muted">
+      <Font ss:FontName="Arial" ss:Size="9" ss:Color="#65716B"/>
+    </Style>
+    <Style ss:ID="Header">
+      <Interior ss:Color="#050504" ss:Pattern="Solid"/>
+      <Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/>
+    </Style>
+    <Style ss:ID="Money">
+      <NumberFormat ss:Format="$ #,##0"/>
+    </Style>
+    <Style ss:ID="Percent">
+      <NumberFormat ss:Format="0%"/>
+    </Style>
+    <Style ss:ID="Warn">
+      <Interior ss:Color="#F3E2CC" ss:Pattern="Solid"/>
+      <Font ss:FontName="Arial" ss:Size="10" ss:Color="#A8662A"/>
+    </Style>
+    <Style ss:ID="Ok">
+      <Interior ss:Color="#DFEEE7" ss:Pattern="Solid"/>
+      <Font ss:FontName="Arial" ss:Size="10" ss:Color="#124C3B"/>
+    </Style>
+  </Styles>
+  ${worksheets.map(worksheetXml).join("")}
+</Workbook>`;
+}
+
+function exportExcelWorkbook(filename, worksheets) {
+  const blob = new Blob([workbookXml(worksheets)], {
+    type: "application/vnd.ms-excel;charset=utf-8",
+  });
+  downloadBlob(blob, filename);
+}
+
+function reportMetaRows(title, note = "") {
+  const project = state.data.project;
+  return [
+    [excelCell("TOTTEM Architecture · Obra Control", "Title")],
+    [title],
+    [],
+    ["Proyecto", projectName()],
+    ["Alcance", projectSubtitle()],
+    ["Fuente", `${project.sourceWorkbook} · ${project.sourceSheet || "CORTES_OBRA"}`],
+    ["Corte fuente", project.generatedAt || project.updatedAt || "Sin fecha"],
+    ["Exportado", reportTimestamp()],
+    ["Nota", note || "Exportable generado desde el dashboard. No modifica el Excel fuente."],
+    [],
+  ];
+}
+
+function clientExcelWorksheets() {
+  const model = clientReportModel();
+  const audit = model.summary.technicalAudit || {};
+  const summaryRows = [
+    ...reportMetaRows("Informe cliente", "Lectura ejecutiva valorizada por semana para comité o reunión con cliente."),
+    excelHeader(["Indicador", "Valor"]),
+    ["Contrato estimado", excelCell(model.contractTotal, "Money")],
+    ["Ejecutado a corte", excelCell(model.executedTotal, "Money")],
+    ["Avance valorizado", excelCell(model.progress, "Percent")],
+    ["Saldo por ejecutar", excelCell(model.balance, "Money")],
+    ["Última semana", excelCell(model.latestWeek?.contractValue || 0, "Money")],
+    ["Promedio semanal", excelCell(model.averageWeek, "Money")],
+    ["Actividades con avance", `${model.summary.activeActivityCount} / ${model.summary.activityCount}`],
+    ["Alertas internas activas", activePending().length],
+    ["Vínculos externos detectados en auditoría", audit.externalRelationships || 0],
+  ];
+
+  const weekRows = [
+    ...reportMetaRows("Avance por semana"),
+    excelHeader(["Semana", "Acta soporte", "Valor contractual", "Valor directo leído", "Avance acumulado", "Actividades", "Movimientos", "Cantidad reportada"]),
+    ...model.weeks.map((week) => [
+      week.label,
+      week.name,
+      excelCell(week.contractValue, "Money"),
+      excelCell(week.directValue, "Money"),
+      excelCell(week.cumulativeProgress, "Percent"),
+      week.items,
+      week.movements,
+      week.quantity,
+    ]),
+  ];
+
+  const chapterRows = [
+    ...reportMetaRows("Frentes principales"),
+    excelHeader(["Frente / capítulo", "Ejecutado contractual", "Ejecutado directo", "Presupuesto directo", "Avance", "Actividades con avance"]),
+    ...model.chapters.map((chapter) => [
+      chapter.name,
+      excelCell(chapter.displayExecuted, "Money"),
+      excelCell(chapter.executed, "Money"),
+      excelCell(chapter.budget, "Money"),
+      excelCell(chapter.progress, "Percent"),
+      chapter.active,
+    ]),
+  ];
+
+  const scopeRows = [
+    ...reportMetaRows("Alcance y decisiones"),
+    excelHeader(["Señal", "Valor", "Lectura"]),
+    ["Presupuesto actualizado directo", excelCell(model.summary.updatedTotal || 0, "Money"), "Valor directo resultante de cantidades actualizadas dentro de la hoja de cortes."],
+    ["No ejecutado directo", excelCell(model.summary.notExecutedTotal || 0, "Money"), "Valor directo identificado como no ejecutado en la lectura actual del archivo."],
+    ["Adicional estimado directo", excelCell(model.summary.additionalTotal || 0, "Money"), "Lectura técnica; requiere revisión de alcance antes de presentarse como decisión final."],
+    ["Alertas internas", activePending().length, "Pendientes que conviene resolver antes de entregar una versión formal al cliente."],
+  ];
+
+  return [
+    { name: "Resumen cliente", widths: [190, 180, 380], rows: summaryRows },
+    { name: "Avance semanal", widths: [92, 150, 126, 126, 104, 94, 94, 110], rows: weekRows },
+    { name: "Frentes", widths: [300, 132, 132, 132, 92, 120], rows: chapterRows },
+    { name: "Alcance", widths: [220, 132, 420], rows: scopeRows },
+  ];
+}
+
+function operationalExcelWorksheets() {
+  const { summary } = state.data;
+  const audit = summary.technicalAudit || {};
+  const summaryRows = [
+    ...reportMetaRows("Informe operativo", "Incluye presupuesto, actas, fuentes, alertas y movimientos locales del navegador."),
+    excelHeader(["Indicador", "Valor"]),
+    ["Presupuesto directo", excelCell(summary.budgetTotal, "Money")],
+    ["Contrato estimado", excelCell(summary.contractTotal || summary.budgetTotal, "Money")],
+    ["Ejecutado directo", excelCell(summary.executedTotal, "Money")],
+    ["Ejecutado contractual", excelCell(summary.executedContractTotal || summary.executedTotal, "Money")],
+    ["Avance directo", excelCell(summary.progress, "Percent")],
+    ["Avance contractual", excelCell(summary.contractProgress || summary.progress, "Percent")],
+    ["Celdas de acta leídas", summary.sourceMovementCount],
+    ["Ítems con avance", summary.sourceItemCount],
+    ["Alertas activas", activePending().length],
+    ["Vínculos externos detectados", audit.externalRelationships || 0],
+    ["Partes externos detectados", audit.externalParts || 0],
+  ];
+
+  const actaRows = [
+    ...reportMetaRows("Actas"),
+    excelHeader(["Acta", "Movimientos", "Ítems", "Cantidad", "Valor directo", "Sin coincidencia", "Revisar"]),
+    ...state.data.actas.map((acta) => [
+      acta.name,
+      acta.movements,
+      acta.items,
+      acta.quantity,
+      excelCell(acta.value, "Money"),
+      acta.unmatched || 0,
+      acta.review || 0,
+    ]),
+  ];
+
+  const activityRows = [
+    ...reportMetaRows("Matriz de actividades"),
+    excelHeader(["Fila", "Ítem", "Capítulo", "Descripción", "Unidad", "Cant. presupuesto", "Precio unitario", "Valor presupuesto", "Cant. ejecutada", "Valor ejecutado", "Saldo cant.", "Saldo valor", "Avance", "Estado"]),
+    ...state.data.activities.map((activity) => [
+      activity.row,
+      activity.item,
+      activity.chapter,
+      activity.description,
+      activity.unit,
+      activity.budgetQty,
+      excelCell(activity.unitPrice, "Money"),
+      excelCell(activity.budgetValue, "Money"),
+      activity.executedQty,
+      excelCell(activity.executedValue, "Money"),
+      activity.balanceQty,
+      excelCell(activity.balanceValue, "Money"),
+      excelCell(activity.progress, "Percent"),
+      activity.status,
+    ]),
+  ];
+
+  const sourceRows = [
+    ...reportMetaRows("Trazabilidad de fuentes"),
+    excelHeader(["Acta", "Fila origen", "Celda cantidad", "Celda valor", "Ítem destino", "Descripción matriz", "Descripción fuente", "Unidad", "Cantidad", "Precio", "Valor", "Archivo", "Hoja", "Nota"]),
+    ...state.data.sources.map((source) => [
+      source.acta,
+      source.sourceRow,
+      source.sourceCell,
+      source.valueCell,
+      source.item,
+      source.description,
+      source.sourceDescription,
+      source.sourceUnit,
+      source.sourceQuantity,
+      excelCell(source.unitPrice, "Money"),
+      excelCell(source.sourceValue, "Money"),
+      source.file,
+      source.sheet,
+      source.note,
+    ]),
+  ];
+
+  const pendingRows = [
+    ...reportMetaRows("Alertas"),
+    excelHeader(["Estado", "Acta", "Fila fuente", "Descripción fuente", "Cantidad", "Unidad", "Sugerencia", "Revisión requerida", "Decisión local", "Archivo"]),
+    ...state.data.pending.map((item) => {
+      const decision = decisionFor(item);
+      return [
+        isResolved(item) ? excelCell("RESUELTO", "Ok") : excelCell(item.status, item.status === "SIN_COINCIDENCIA" ? "Warn" : ""),
+        item.acta,
+        item.sourceRow,
+        item.sourceDescription,
+        item.quantity,
+        item.unit,
+        item.suggestedDescription || item.suggestedItem || "",
+        item.review || item.note || item.candidates || "",
+        decision ? `${decision.method}${decision.item ? ` · ${decision.item}` : ""}` : "Pendiente",
+        item.file,
+      ];
+    }),
+  ];
+
+  const movementRows = [
+    ...reportMetaRows("Movimientos locales", "Bandeja local de este navegador; todavía no modifica el Excel fuente ni una base compartida."),
+    excelHeader(["Fecha", "Acta", "Estado", "Tipo", "Actividad reportada", "Ítem destino", "Unidad", "Cantidad", "Valor simulado", "Fuente", "Frente", "Observación", "Feedback", "Revisión"]),
+    ...state.movements.map((movement) => [
+      movement.date,
+      movement.acta,
+      movement.status,
+      movement.type,
+      movement.reportedDescription,
+      movement.activity ? `${movement.activity.item} · ${movement.activity.description}` : "Pendiente",
+      movement.unit,
+      movement.quantity,
+      excelCell(movement.simulatedValue || 0, "Money"),
+      movement.source,
+      movement.zone,
+      movement.note,
+      movementFeedbackLabel(movement.architectFeedback),
+      movement.reviewReason || "",
+    ]),
+  ];
+
+  return [
+    { name: "Resumen operativo", widths: [230, 190], rows: summaryRows },
+    { name: "Actas", widths: [170, 100, 80, 100, 126, 110, 90], rows: actaRows },
+    { name: "Actividades", widths: [56, 70, 190, 420, 70, 104, 112, 126, 104, 126, 94, 112, 82, 110], rows: activityRows },
+    { name: "Fuentes", widths: [150, 80, 92, 92, 90, 300, 360, 70, 90, 110, 120, 220, 120, 240], rows: sourceRows },
+    { name: "Alertas", widths: [126, 150, 80, 360, 90, 70, 300, 340, 160, 220], rows: pendingRows },
+    { name: "Movimientos locales", widths: [100, 150, 142, 100, 360, 360, 70, 90, 126, 150, 150, 300, 120, 250], rows: movementRows },
+  ];
+}
+
+function exportClientExcel() {
+  exportExcelWorkbook(`${projectSlug()}-informe-cliente-${fileDateStamp()}.xls`, clientExcelWorksheets());
+  openInspector("Excel cliente generado", "Descargué un libro compatible con Excel con resumen, avance por semana, frentes y señales de alcance.", [
+    ["Proyecto", projectName()],
+    ["Fuente", `${state.data.project.sourceWorkbook} · ${state.data.project.sourceSheet || "CORTES_OBRA"}`],
+    ["Vínculos externos", "No se crean vínculos externos en este exportable"],
+  ]);
+}
+
+function exportOperationalExcel() {
+  exportExcelWorkbook(`${projectSlug()}-informe-operativo-${fileDateStamp()}.xls`, operationalExcelWorksheets());
+  openInspector("Excel operativo generado", "Descargué un libro de trabajo para comité interno con matriz, actas, fuentes, alertas y movimientos locales.", [
+    ["Actividades", state.data.activities.length],
+    ["Fuentes", state.data.sources.length],
+    ["Movimientos locales", state.movements.length],
+    ["Excel fuente", "Sin cambios"],
+  ]);
+}
+
+function clientReportHtml(model = clientReportModel()) {
+  const logo = new URL("./assets/tottem-architecture-white.png", location.href).href;
+  const weekMax = Math.max(...model.weeks.map((week) => week.contractValue), 1);
+  const weekRows = model.weeks
+    .map((week) => {
+      const width = Math.max((week.contractValue / weekMax) * 100, 4);
+      return `
+        <tr>
+          <td><strong>${escapeHtml(week.label)}</strong><span>${escapeHtml(week.name)}</span></td>
+          <td>${formatMoney(week.contractValue)}</td>
+          <td>${formatPercent(week.cumulativeProgress)}</td>
+          <td>${week.items}</td>
+          <td><i style="width:${width}%"></i></td>
+        </tr>
+      `;
+    })
+    .join("");
+  const chapterRows = model.chapters
+    .slice(0, 6)
+    .map((chapter) => `
+      <tr>
+        <td>${escapeHtml(chapter.name)}</td>
+        <td>${formatMoney(chapter.displayExecuted)}</td>
+        <td>${formatPercent(chapter.progress)}</td>
+        <td>${chapter.active}</td>
+      </tr>
+    `)
+    .join("");
+
+  return `<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(projectName())} · Informe cliente</title>
+    <style>
+      @page { size: A4; margin: 16mm; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        color: #111512;
+        background: #f6f7f3;
+        font-family: Inter, Arial, sans-serif;
+      }
+      .report {
+        max-width: 980px;
+        margin: 0 auto;
+        background: #f6f7f3;
+      }
+      .print-controls {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 14px 0;
+      }
+      .print-controls button {
+        min-height: 38px;
+        border: 1px solid #050504;
+        border-radius: 6px;
+        background: #050504;
+        color: #fff;
+        padding: 0 14px;
+        cursor: pointer;
+        font: inherit;
+      }
+      .masthead {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 210px;
+        gap: 28px;
+        align-items: center;
+        min-height: 154px;
+        padding: 28px;
+        color: #fff;
+        background: #050504;
+      }
+      .masthead img {
+        width: 210px;
+        max-width: 100%;
+      }
+      .kicker {
+        margin: 0 0 10px;
+        color: #b7beb7;
+        font-size: 11px;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+      h1, h2, p { margin: 0; }
+      h1 {
+        max-width: 620px;
+        font-size: 42px;
+        line-height: .95;
+      }
+      .date-note {
+        margin-top: 14px;
+        color: #d6dbd5;
+        line-height: 1.45;
+      }
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border: 1px solid #d8ded8;
+        border-top: 0;
+        background: #fff;
+      }
+      .summary div {
+        min-height: 96px;
+        padding: 16px;
+        border-right: 1px solid #d8ded8;
+      }
+      .summary div:last-child { border-right: 0; }
+      .summary span,
+      .scope span {
+        display: block;
+        color: #65716b;
+        font-size: 11px;
+        text-transform: uppercase;
+      }
+      .summary strong {
+        display: block;
+        margin-top: 14px;
+        color: #124c3b;
+        font-size: 25px;
+        line-height: 1;
+      }
+      .brief {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr);
+        gap: 28px;
+        padding: 28px 0 8px;
+      }
+      .brief h2,
+      .block h2 {
+        font-size: 21px;
+        line-height: 1.1;
+      }
+      .brief p {
+        margin-top: 10px;
+        color: #65716b;
+        line-height: 1.55;
+      }
+      .progress-ring {
+        display: grid;
+        place-items: center;
+        align-content: center;
+        justify-self: end;
+        width: 170px;
+        height: 170px;
+        border: 1px solid #d8ded8;
+        border-radius: 50%;
+        background: #fff;
+      }
+      .progress-ring strong {
+        color: #124c3b;
+        font-size: 44px;
+        line-height: 1;
+      }
+      .progress-ring span {
+        margin-top: 8px;
+        color: #65716b;
+        font-size: 12px;
+      }
+      .block {
+        margin-top: 24px;
+        padding-top: 18px;
+        border-top: 1px solid #d8ded8;
+      }
+      table {
+        width: 100%;
+        margin-top: 14px;
+        border-collapse: collapse;
+        background: #fff;
+      }
+      th, td {
+        padding: 12px 10px;
+        border-bottom: 1px solid #d8ded8;
+        text-align: left;
+        vertical-align: top;
+        font-size: 12px;
+      }
+      th {
+        color: #65716b;
+        font-size: 10px;
+        text-transform: uppercase;
+      }
+      td strong,
+      td span {
+        display: block;
+      }
+      td span {
+        margin-top: 3px;
+        color: #65716b;
+      }
+      td i {
+        display: block;
+        height: 6px;
+        min-width: 12px;
+        border-radius: 999px;
+        background: #24765e;
+      }
+      .scope {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        margin-top: 14px;
+        border: 1px solid #d8ded8;
+        background: #d8ded8;
+      }
+      .scope div {
+        min-height: 88px;
+        padding: 14px;
+        background: #fff;
+      }
+      .scope strong {
+        display: block;
+        margin-top: 14px;
+        color: #124c3b;
+        font-size: 19px;
+      }
+      footer {
+        margin-top: 28px;
+        padding-top: 12px;
+        border-top: 1px solid #d8ded8;
+        color: #65716b;
+        font-size: 11px;
+        line-height: 1.45;
+      }
+      @media print {
+        body { background: #fff; }
+        .report { max-width: none; }
+        .print-controls { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="report">
+      <div class="print-controls">
+        <button type="button" onclick="window.print()">Guardar como PDF</button>
+      </div>
+      <header class="masthead">
+        <div>
+          <p class="kicker">Informe de avance para cliente</p>
+          <h1>${escapeHtml(projectName())}</h1>
+          <p class="date-note">${escapeHtml(projectSubtitle())}<br/>Corte generado desde ${escapeHtml(model.project.sourceSheet || "CORTES_OBRA")} · ${escapeHtml(model.project.generatedAt || model.project.updatedAt || "sin fecha")}</p>
+        </div>
+        <img src="${logo}" alt="Tottem Architecture" />
+      </header>
+      <section class="summary">
+        <div><span>Contrato estimado</span><strong>${formatMoney(model.contractTotal)}</strong></div>
+        <div><span>Ejecutado a corte</span><strong>${formatMoney(model.executedTotal)}</strong></div>
+        <div><span>Última semana</span><strong>${formatMoney(model.latestWeek?.contractValue || 0)}</strong></div>
+        <div><span>Saldo por ejecutar</span><strong>${formatMoney(model.balance)}</strong></div>
+      </section>
+      <section class="brief">
+        <div>
+          <h2>Lectura ejecutiva</h2>
+          <p>${formatPercent(model.progress)} ejecutado, ${model.weeks.length} semanas con avance y ${model.summary.activeActivityCount} actividades con movimiento visible. Las actas siguen como soporte técnico, pero la lectura para cliente se presenta por semana.</p>
+        </div>
+        <div class="progress-ring">
+          <strong>${formatPercent(model.progress)}</strong>
+          <span>Avance valorizado</span>
+        </div>
+      </section>
+      <section class="block">
+        <h2>Avance por semana</h2>
+        <table>
+          <thead><tr><th>Semana</th><th>Valor</th><th>Acumulado</th><th>Actividades</th><th>Ritmo</th></tr></thead>
+          <tbody>${weekRows || `<tr><td colspan="5">Sin semanas valorizadas.</td></tr>`}</tbody>
+        </table>
+      </section>
+      <section class="block">
+        <h2>Frentes principales</h2>
+        <table>
+          <thead><tr><th>Frente</th><th>Ejecutado</th><th>Avance</th><th>Actividades</th></tr></thead>
+          <tbody>${chapterRows || `<tr><td colspan="4">Sin frentes valorizados.</td></tr>`}</tbody>
+        </table>
+      </section>
+      <section class="block">
+        <h2>Alcance y decisiones</h2>
+        <div class="scope">
+          <div><span>Presupuesto actualizado directo</span><strong>${formatMoney(model.summary.updatedTotal || 0)}</strong></div>
+          <div><span>No ejecutado directo</span><strong>${formatMoney(model.summary.notExecutedTotal || 0)}</strong></div>
+          <div><span>Alertas internas</span><strong>${activePending().length}</strong></div>
+        </div>
+      </section>
+      <footer>
+        Fuente: ${escapeHtml(model.project.sourceWorkbook)} · ${escapeHtml(model.project.sourceSheet || "CORTES_OBRA")}. Reporte generado desde Obra Control el ${escapeHtml(reportTimestamp())}. Este exportable no modifica el Excel fuente ni crea vínculos externos.
+      </footer>
+    </main>
+  </body>
+</html>`;
+}
+
+function exportClientPdf() {
+  const reportWindow = window.open("", "_blank");
+  if (!reportWindow) {
+    openInspector("No se pudo abrir el PDF", "El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para generar el informe.", [
+      ["Proyecto", projectName()],
+    ]);
+    return;
+  }
+  reportWindow.document.open();
+  reportWindow.document.write(clientReportHtml());
+  reportWindow.document.close();
+  reportWindow.focus();
+  openInspector("PDF cliente preparado", "Abrí una versión A4 con lenguaje Tottem. Usa el botón Guardar como PDF dentro del informe.", [
+    ["Formato", "A4"],
+    ["Lectura", "Avance por semana"],
+    ["Excel fuente", "Sin cambios"],
+  ]);
+}
+
 function packageSummaryText(payload = buildHandoffPackage()) {
   return [
     `Proyecto: ${payload.project.name}`,
@@ -2182,6 +2880,9 @@ function bindEvents() {
   $("#inspectorClose").addEventListener("click", closeInspector);
   $("#exportDecisions").addEventListener("click", exportDecisions);
   $("#clearDecisions").addEventListener("click", clearDecisions);
+  $("#exportClientPdf")?.addEventListener("click", exportClientPdf);
+  $("#exportClientExcel")?.addEventListener("click", exportClientExcel);
+  $("#exportOpsExcel")?.addEventListener("click", exportOperationalExcel);
   $("#exportMovements")?.addEventListener("click", exportMovements);
   $("#copyPackageSummary")?.addEventListener("click", copyPackageSummary);
   $("#clearMovements")?.addEventListener("click", clearMovements);
