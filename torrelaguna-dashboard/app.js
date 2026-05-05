@@ -27,7 +27,15 @@ const DECISION_KEY_PREFIX = "obra-control-local-decisions";
 const MOVEMENT_KEY_PREFIX = "obra-control-local-movements";
 const DEFAULT_DATA_URL = "./data/torrelaguna.json";
 const PACKAGE_SCHEMA_VERSION = "obra-control.v0.3";
-const DASHBOARD_BUILD = "20260505-sprint4-portable";
+const DASHBOARD_BUILD = "20260505-sprint5-brand";
+const DEFAULT_UNITS = ["m2", "ml", "m", "und", "gl", "kg", "m3"];
+const DEFAULT_SOURCES = ["Medina", "Albeiro", "Grillo", "Jairo", "Visita de obra", "Memoria de obra", "Foto soporte"];
+const ENTRY_TEMPLATES = [
+  ["avance", "Avance", "Cantidad ejecutada en campo."],
+  ["adicional", "Adicional", "Posible actividad fuera de alcance base."],
+  ["correccion", "Corrección", "Ajuste de cantidad o clasificación."],
+  ["no_ejecutado", "No ejecutado", "Actividad descontada o anulada."],
+];
 const STOP_WORDS = new Set([
   "con",
   "para",
@@ -166,7 +174,7 @@ function renderProjectChrome() {
   const project = state.data.project;
   document.title = `${projectName()} | Dashboard de obra`;
   $("#brandName").textContent = projectName();
-  $("#brandSubtitle").textContent = "Cortes de campo";
+  $("#brandSubtitle").textContent = "Obra Control";
   $("#projectEyebrow").textContent = projectSubtitle();
   $("#workspaceTitle").textContent = "Dashboard de campo";
   $("#clientProjectName").textContent = projectName();
@@ -497,6 +505,68 @@ function fillEntryForm(entry) {
   $("#entryType").value = entry.type || "avance";
   $("#entryDescription").value = entry.description || "";
   $("#entryNote").value = entry.note || "";
+}
+
+function uniqueValues(values) {
+  return [...new Set(values.filter(Boolean).map((value) => String(value).trim()).filter(Boolean))];
+}
+
+function sourceOptions() {
+  return uniqueValues([
+    ...DEFAULT_SOURCES,
+    ...state.movements.map((movement) => movement.source),
+  ]).slice(0, 18);
+}
+
+function unitOptions() {
+  return uniqueValues([
+    ...DEFAULT_UNITS,
+    ...state.data.activities.map((activity) => activity.unit),
+    ...state.data.sources.map((source) => source.sourceUnit),
+  ]).slice(0, 20);
+}
+
+function suggestedActivities() {
+  const active = state.data.activities
+    .filter((activity) => activity.executedValue > 0 || activity.status !== "Sin avance")
+    .sort((a, b) => (b.executedValue || b.budgetValue) - (a.executedValue || a.budgetValue))
+    .slice(0, 8);
+  if (active.length) return active;
+  return [...state.data.activities].sort((a, b) => b.budgetValue - a.budgetValue).slice(0, 8);
+}
+
+function applyActivitySuggestion(row) {
+  const activity = state.data.activities.find((item) => String(item.row) === String(row));
+  if (!activity) return;
+  state.selectedMatchRow = activity.row;
+  $("#entryDescription").value = activity.description;
+  $("#entryUnit").value = activity.unit;
+  $("#entryType").value = "avance";
+  const balance = Number(activity.balanceQty || 0);
+  if (balance > 0 && !Number($("#entryQuantity").value || 0)) {
+    $("#entryQuantity").value = number.format(balance).replace(/\./g, "").replace(",", ".");
+  }
+  renderIngestion();
+  $("#entryQuantity")?.focus();
+}
+
+function applySourceSuggestion(source) {
+  $("#entrySource").value = source;
+  renderIngestion();
+}
+
+function applyTemplate(kind) {
+  const template = ENTRY_TEMPLATES.find(([id]) => id === kind);
+  if (!template) return;
+  $("#entryType").value = kind;
+  if (!$("#entryNote").value) {
+    $("#entryNote").value = template[2];
+  }
+  if (kind === "adicional") {
+    state.selectedMatchRow = null;
+  }
+  renderIngestion();
+  $("#entryDescription")?.focus();
 }
 
 function parseQuickEntry(options = {}) {
@@ -987,6 +1057,45 @@ function renderMovementBuckets() {
   });
 }
 
+function renderEntryAssist() {
+  const unitList = $("#unitSuggestions");
+  const sourceList = $("#sourceSuggestions");
+  if (unitList) {
+    unitList.innerHTML = unitOptions().map((unit) => `<option value="${unit}"></option>`).join("");
+  }
+  if (sourceList) {
+    sourceList.innerHTML = sourceOptions().map((source) => `<option value="${source}"></option>`).join("");
+  }
+
+  $("#activityAssist").innerHTML = suggestedActivities()
+    .map((activity) => `
+      <button type="button" data-assist-activity="${activity.row}">
+        <strong>${activity.item} · ${activity.unit}</strong>
+        <span>${truncate(activity.description, 72)}</span>
+      </button>
+    `)
+    .join("");
+
+  $("#sourceAssist").innerHTML = sourceOptions()
+    .slice(0, 8)
+    .map((source) => `<button type="button" data-assist-source="${source}">${source}</button>`)
+    .join("");
+
+  $("#templateAssist").innerHTML = ENTRY_TEMPLATES
+    .map(([id, label]) => `<button type="button" data-assist-template="${id}">${label}</button>`)
+    .join("");
+
+  document.querySelectorAll("[data-assist-activity]").forEach((button) => {
+    button.addEventListener("click", () => applyActivitySuggestion(button.dataset.assistActivity));
+  });
+  document.querySelectorAll("[data-assist-source]").forEach((button) => {
+    button.addEventListener("click", () => applySourceSuggestion(button.dataset.assistSource));
+  });
+  document.querySelectorAll("[data-assist-template]").forEach((button) => {
+    button.addEventListener("click", () => applyTemplate(button.dataset.assistTemplate));
+  });
+}
+
 function renderIngestion() {
   if (!$("#entryForm")) return;
   const entry = entryValues();
@@ -1003,6 +1112,7 @@ function renderIngestion() {
   $("#ingestCount").textContent = state.movements.length;
   $("#ingestPendingCount").textContent = pendingCount;
   $("#ingestTotalValue").textContent = formatMoney(total);
+  renderEntryAssist();
   renderMovementBuckets();
 
   if (activity) {

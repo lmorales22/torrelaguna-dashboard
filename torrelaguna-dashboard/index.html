@@ -5,16 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dashboard de obra</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260505-sprint4-portable" />
+    <link rel="stylesheet" href="./styles.css?v=20260505-sprint5-brand" />
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <span class="brand-mark"></span>
-          <div>
+          <img class="brand-logo" src="./assets/tottem-architecture-white.png" alt="Tottem Architecture" />
+          <div class="brand-context">
             <strong id="brandName">Cargando obra</strong>
-            <small id="brandSubtitle">Cortes de campo</small>
+            <small id="brandSubtitle">Obra Control</small>
           </div>
         </div>
         <nav class="nav">
@@ -239,6 +239,21 @@
             </div>
           </section>
 
+          <section class="intake-assist">
+            <div>
+              <span>Actividades sugeridas</span>
+              <div id="activityAssist" class="assist-list"></div>
+            </div>
+            <div>
+              <span>Fuentes rápidas</span>
+              <div id="sourceAssist" class="assist-chips"></div>
+            </div>
+            <div>
+              <span>Plantillas</span>
+              <div id="templateAssist" class="assist-chips"></div>
+            </div>
+          </section>
+
           <div class="ingest-layout">
             <form class="entry-form" id="entryForm">
               <div class="form-head">
@@ -275,13 +290,15 @@
                 </label>
                 <label>
                   <span>Unidad reportada</span>
-                  <input id="entryUnit" type="text" placeholder="m2, ml, und..." />
+                  <input id="entryUnit" type="text" list="unitSuggestions" placeholder="m2, ml, und..." />
                 </label>
                 <label>
                   <span>Fuente / procedencia</span>
-                  <input id="entrySource" type="text" placeholder="Medina, visita, memoria, foto..." />
+                  <input id="entrySource" type="text" list="sourceSuggestions" placeholder="Medina, visita, memoria, foto..." />
                 </label>
               </div>
+              <datalist id="unitSuggestions"></datalist>
+              <datalist id="sourceSuggestions"></datalist>
 
               <label class="wide-field">
                 <span>Actividad reportada en campo</span>
@@ -439,6 +456,6 @@
       </aside>
     </div>
 
-    <script src="./app.js?v=20260505-sprint4-portable"></script>
+    <script src="./app.js?v=20260505-sprint5-brand"></script>
   </body>
 </html>
