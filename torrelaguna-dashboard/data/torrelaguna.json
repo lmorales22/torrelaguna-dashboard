@@ -3,9 +3,9 @@
     "name": "Torre Laguna",
     "subtitle": "Reforma segundo piso - Motorlaguna",
     "sourceWorkbook": "Latest.xlsx",
-    "sourceSheet": "CORTES_OBRA",
+    "sourceSheet": "PROYECCIÓN_CLIENTE / CORTES_OBRA",
     "updatedAt": "2026-05-06 09:30",
-    "generatedAt": "2026-05-06 09:37"
+    "generatedAt": "2026-05-06 10:15"
   },
   "summary": {
     "budgetTotal": 130992112.60000001,
@@ -18,8 +18,7 @@
     "additionalTotal": 127185474.99000001,
     "notExecutedTotal": 32410714.5,
     "updatedTotal": 97991738.795,
-    "clientBudgetTotal": 0,
-    "clientContractTotal": 0,
+    "clientContractTotal": 154525012.4117,
     "activityCount": 219,
     "activeActivityCount": 62,
     "sourceMovementCount": 73,
@@ -42,7 +41,10 @@
       "vbaProjects": 0,
       "drawingParts": 4,
       "mediaParts": 0
-    }
+    },
+    "clientInitialTotal": 154525012.4117,
+    "clientAdditionalTotal": 149937208.440705,
+    "clientProjectionTotal": 299025968.337705
   },
   "actas": [
     {
