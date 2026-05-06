@@ -5,26 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dashboard de obra</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260505-sprint12-client-totals" />
+    <link rel="stylesheet" href="./styles.css?v=20260506-client-meeting-latest" />
   </head>
-  <body>
+  <body class="client-meeting-mode">
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
           <img class="brand-logo" src="./assets/tottem-architecture-white.png" alt="Tottem Architecture" />
           <div class="brand-context">
             <strong id="brandName">Cargando obra</strong>
-            <small id="brandSubtitle">Obra Control</small>
+            <small id="brandSubtitle">Informe cliente</small>
           </div>
         </div>
         <nav class="nav">
-          <button class="nav-item" data-section="client">Cliente</button>
-          <button class="nav-item active" data-section="overview">Resumen</button>
-          <button class="nav-item" data-section="ingest">Ingreso</button>
-          <button class="nav-item" data-section="actas">Actas</button>
-          <button class="nav-item" data-section="activities">Actividades</button>
-          <button class="nav-item" data-section="pending">Alertas</button>
-          <button class="nav-item" data-section="trace">Trazabilidad</button>
+          <button class="nav-item active" data-section="client">Cliente</button>
+          <button class="nav-item locked" data-section="overview" aria-disabled="true" disabled>Resumen</button>
+          <button class="nav-item locked" data-section="ingest" aria-disabled="true" disabled>Ingreso</button>
+          <button class="nav-item locked" data-section="actas" aria-disabled="true" disabled>Actas</button>
+          <button class="nav-item locked" data-section="activities" aria-disabled="true" disabled>Actividades</button>
+          <button class="nav-item locked" data-section="pending" aria-disabled="true" disabled>Alertas</button>
+          <button class="nav-item locked" data-section="trace" aria-disabled="true" disabled>Trazabilidad</button>
         </nav>
         <div class="sidebar-note">
           <span>Base</span>
@@ -42,13 +42,13 @@
             <div class="export-actions" aria-label="Exportables">
               <button id="exportClientPdf" type="button">PDF cliente</button>
               <button id="exportClientExcel" type="button">Excel cliente</button>
-              <button id="exportOpsExcel" type="button">Excel operativo</button>
+              <button id="exportOpsExcel" type="button" hidden>Excel operativo</button>
             </div>
-            <label class="search">
+            <label class="search client-only-hidden">
               <span>Buscar</span>
               <input id="searchInput" type="search" placeholder="Ítem, actividad, fuente..." />
             </label>
-            <select id="actaFilter" aria-label="Filtrar por acta">
+            <select id="actaFilter" class="client-only-hidden" aria-label="Filtrar por acta">
               <option value="all">Todas las actas</option>
             </select>
           </div>
@@ -63,7 +63,7 @@
               <div class="client-hero-meta">
                 <span id="clientHeroStatus">Estado del corte</span>
                 <span id="clientHeroWeeks">Semanas con avance</span>
-                <span id="clientHeroSource">Fuente controlada</span>
+                <span id="clientHeroSource">Información consolidada</span>
               </div>
             </div>
             <div class="client-progress">
@@ -76,12 +76,12 @@
           <section class="client-value-stack" aria-label="Composición del valor de obra">
             <div>
               <span>Contrato inicial</span>
-              <small>Matriz presupuesto · G238</small>
+              <small>Alcance inicial aprobado</small>
               <strong id="clientContractTotal">$0</strong>
             </div>
             <div>
               <span>Adicionales de obra</span>
-              <small>Matriz presupuesto · I238</small>
+              <small>Alcance complementario</small>
               <strong id="clientAdditionalTotal">$0</strong>
             </div>
             <div class="client-value-total">
@@ -120,7 +120,7 @@
               <strong id="clientBalanceTotal">$0</strong>
             </div>
             <div>
-              <span>Actividades con avance</span>
+              <span>Semanas con avance</span>
               <strong id="clientActiveActivities">0</strong>
             </div>
           </section>
@@ -151,22 +151,22 @@
           <section class="client-block client-scope">
             <div class="panel-heading">
               <div>
-                <h2>Alcance y decisiones</h2>
-                <p>Señales resumidas para revisar costo, alcance y cambios antes de comité.</p>
+                <h2>Resumen de alcance</h2>
+                <p>Lectura consolidada del avance para conversación con cliente.</p>
               </div>
             </div>
             <div class="scope-strip">
               <button class="scope-item" data-client-action="scope-updated">
-                <span>Presupuesto actualizado directo</span>
+                <span>Última semana valorizada</span>
                 <strong id="clientUpdatedTotal">$0</strong>
               </button>
               <button class="scope-item" data-client-action="scope-not-executed">
-                <span>No ejecutado directo</span>
+                <span>Saldo contrato inicial</span>
                 <strong id="clientNotExecuted">$0</strong>
               </button>
               <button class="scope-item" data-client-action="scope-alerts">
-                <span>Alertas internas</span>
-                <strong id="clientAlerts">0</strong>
+                <span>Avance sobre total obra</span>
+                <strong id="clientAlerts">0%</strong>
               </button>
             </div>
           </section>
@@ -552,6 +552,6 @@
       </aside>
     </div>
 
-    <script src="./app.js?v=20260505-sprint12-client-totals"></script>
+    <script src="./app.js?v=20260506-client-meeting-latest"></script>
   </body>
 </html>

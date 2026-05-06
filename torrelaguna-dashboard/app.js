@@ -35,7 +35,8 @@ const ALIAS_KEY_PREFIX = "obra-control-alias-memory";
 const DEFAULT_DATA_URL = "./data/torrelaguna.json";
 const DEFAULT_CATALOG_URL = "./data/apu_catalog.json";
 const PACKAGE_SCHEMA_VERSION = "obra-control.v0.3";
-const DASHBOARD_BUILD = "20260505-sprint12-client-totals";
+const DASHBOARD_BUILD = "20260506-client-meeting-latest";
+const CLIENT_MEETING_MODE = document.body.classList.contains("client-meeting-mode");
 const DEFAULT_UNITS = ["m2", "ml", "m", "und", "gl", "kg", "m3"];
 const DEFAULT_SOURCES = ["Medina", "Albeiro", "Grillo", "Jairo", "Visita de obra", "Memoria de obra", "Foto soporte"];
 const ENTRY_TEMPLATES = [
@@ -193,13 +194,15 @@ function projectSlug() {
 
 function renderProjectChrome() {
   const project = state.data.project;
-  document.title = `${projectName()} | Dashboard de obra`;
+  document.title = `${projectName()} | Informe cliente`;
   $("#brandName").textContent = projectName();
-  $("#brandSubtitle").textContent = "Obra Control";
+  $("#brandSubtitle").textContent = CLIENT_MEETING_MODE ? "Informe cliente" : "Obra Control";
   $("#projectEyebrow").textContent = projectSubtitle();
-  $("#workspaceTitle").textContent = "Dashboard de campo";
+  $("#workspaceTitle").textContent = CLIENT_MEETING_MODE ? "Informe cliente" : "Dashboard de campo";
   $("#clientProjectName").textContent = projectName();
-  $("#sourceWorkbook").textContent = `${project.sourceWorkbook} · ${project.sourceSheet || "CORTES_OBRA"}`;
+  $("#sourceWorkbook").textContent = CLIENT_MEETING_MODE
+    ? "Corte actualizado"
+    : `${project.sourceWorkbook} · ${project.sourceSheet || "CORTES_OBRA"}`;
 }
 
 function filteredActivities() {
@@ -461,14 +464,14 @@ function renderClient() {
     totalProgress,
   } = clientReportModel();
 
-  $("#clientFreshness").textContent = `Corte generado desde ${project.sourceSheet || "CORTES_OBRA"} · ${project.generatedAt || project.updatedAt}`;
+  $("#clientFreshness").textContent = `Corte actualizado · ${project.generatedAt || project.updatedAt}`;
   $("#clientProgressValue").textContent = formatPercent(progress);
   $(".client-progress")?.style.setProperty("--client-progress", `${Math.min(Math.max(progress * 100, 0), 100)}%`);
   $("#clientProgressContext").textContent = "Sobre contrato inicial";
   $("#clientHeroStatus").textContent =
     progress >= 0.75 ? "Avance alto" : progress >= 0.45 ? "Obra en ejecución" : "Corte inicial";
   $("#clientHeroWeeks").textContent = `${weeks.length} semanas valorizadas`;
-  $("#clientHeroSource").textContent = project.sourceSheet || "CORTES_OBRA";
+  $("#clientHeroSource").textContent = "Información consolidada";
   $("#clientContractTotal").textContent = formatMoney(contractTotal);
   $("#clientAdditionalTotal").textContent = formatMoney(additionalTotal);
   $("#clientGrandTotal").textContent = formatMoney(grandTotal);
@@ -477,11 +480,11 @@ function renderClient() {
   $("#clientLatestWeek").textContent = formatMoney(latestWeek?.contractValue || 0);
   $("#clientAverageWeek").textContent = formatMoney(averageWeek);
   $("#clientBalanceTotal").textContent = formatMoney(balance);
-  $("#clientActiveActivities").textContent = `${summary.activeActivityCount} / ${summary.activityCount}`;
+  $("#clientActiveActivities").textContent = `${weeks.length}`;
   $("#clientBriefProgress").textContent = `${formatMoney(contractTotal)} de contrato inicial + ${formatMoney(additionalTotal)} en adicionales = ${formatMoney(grandTotal)} de obra total. Avance sobre contrato inicial: ${formatPercent(progress)}.`;
-  $("#clientUpdatedTotal").textContent = formatMoney(summary.updatedTotal || 0);
-  $("#clientNotExecuted").textContent = formatMoney(summary.notExecutedTotal || 0);
-  $("#clientAlerts").textContent = activePending().length;
+  $("#clientUpdatedTotal").textContent = formatMoney(latestWeek?.contractValue || 0);
+  $("#clientNotExecuted").textContent = formatMoney(balance);
+  $("#clientAlerts").textContent = formatPercent(totalProgress);
 
   $("#clientWeeks").innerHTML = weeks
     .map((week) => {
@@ -534,12 +537,9 @@ function renderClient() {
     button.addEventListener("click", () => {
       const week = weeks.find((item) => String(item.week) === button.dataset.week);
       openInspector(`${week.label} · ${week.name}`, "Resumen ejecutivo semanal leído desde la hoja de cortes.", [
-        ["Valor semanal contractual", formatMoney(week.contractValue)],
-        ["Valor directo leído", formatMoney(week.directValue)],
+        ["Valor semanal", formatMoney(week.contractValue)],
         ["Avance acumulado", formatPercent(week.cumulativeProgress)],
-        ["Actividades", week.items],
-        ["Registros", week.movements],
-        ["Cantidad reportada", number.format(week.quantity)],
+        ["Actividades agrupadas", week.items],
       ]);
     });
   });
@@ -553,7 +553,6 @@ function renderClient() {
         ["Semana", week ? `${week.label} · ${week.name}` : "Sin registro"],
         ["Valor", kind === "average" ? formatMoney(averageWeek) : formatMoney(week?.contractValue || 0)],
         ["Semanas leídas", weeks.length],
-        ["Fuente", `${project.sourceWorkbook} · ${project.sourceSheet || "CORTES_OBRA"}`],
       ]);
     });
   });
@@ -562,9 +561,7 @@ function renderClient() {
     button.addEventListener("click", () => {
       const chapter = chapters[Number(button.dataset.chapterIndex)];
       openInspector(chapter.name, "Frente de obra con avance valorizado acumulado.", [
-        ["Ejecutado contractual", formatMoney(chapter.displayExecuted)],
-        ["Ejecutado directo leído", formatMoney(chapter.executed)],
-        ["Presupuesto directo", formatMoney(chapter.budget)],
+        ["Ejecutado", formatMoney(chapter.displayExecuted)],
         ["Avance", formatPercent(chapter.progress)],
         ["Actividades con avance", chapter.active],
       ]);
@@ -576,24 +573,23 @@ function renderClient() {
       const action = button.dataset.clientAction;
       const copy = {
         "scope-updated": [
-          "Presupuesto actualizado directo",
-          "Valor directo resultante de cantidades actualizadas dentro de la hoja de cortes.",
-          formatMoney(summary.updatedTotal || 0),
+          "Última semana valorizada",
+          "Valor del corte semanal más reciente incluido en el informe.",
+          formatMoney(latestWeek?.contractValue || 0),
         ],
         "scope-not-executed": [
-          "No ejecutado directo",
-          "Valor directo identificado como no ejecutado en la lectura actual del archivo.",
-          formatMoney(summary.notExecutedTotal || 0),
+          "Saldo contrato inicial",
+          "Valor pendiente frente al contrato inicial aprobado.",
+          formatMoney(balance),
         ],
         "scope-alerts": [
-          "Alertas internas",
-          "Señales de control que conviene resolver antes de presentar una versión formal al cliente.",
-          `${activePending().length} alertas activas`,
+          "Avance sobre total obra",
+          "Lectura del ejecutado actual frente al contrato inicial más adicionales.",
+          formatPercent(totalProgress),
         ],
       }[action];
       openInspector(copy[0], copy[1], [
         ["Valor", copy[2]],
-        ["Fuente", `${project.sourceWorkbook} · ${project.sourceSheet || "CORTES_OBRA"}`],
       ]);
     };
   });
@@ -2233,14 +2229,28 @@ function reportMetaRows(title, note = "") {
   ];
 }
 
+function clientReportMetaRows(title, note = "") {
+  const project = state.data.project;
+  return [
+    [excelCell("TOTTEM Architecture", "Title")],
+    [title],
+    [],
+    ["Proyecto", projectName()],
+    ["Alcance", projectSubtitle()],
+    ["Corte", project.generatedAt || project.updatedAt || "Sin fecha"],
+    ["Exportado", reportTimestamp()],
+    ["Nota", note || "Informe cliente generado desde información consolidada de obra."],
+    [],
+  ];
+}
+
 function clientExcelWorksheets() {
   const model = clientReportModel();
-  const audit = model.summary.technicalAudit || {};
   const summaryRows = [
-    ...reportMetaRows("Informe cliente", "Lectura ejecutiva valorizada por semana para comité o reunión con cliente."),
+    ...clientReportMetaRows("Informe cliente", "Lectura ejecutiva valorizada por semana para reunión con cliente."),
     excelHeader(["Indicador", "Valor"]),
-    ["Contrato inicial (G238)", excelCell(model.contractTotal, "Money")],
-    ["Adicionales de obra (I238)", excelCell(model.additionalTotal, "Money")],
+    ["Contrato inicial", excelCell(model.contractTotal, "Money")],
+    ["Adicionales de obra", excelCell(model.additionalTotal, "Money")],
     ["Gran total obra", excelCell(model.grandTotal, "Money")],
     ["Ejecutado a corte", excelCell(model.executedTotal, "Money")],
     ["Avance sobre contrato inicial", excelCell(model.progress, "Percent")],
@@ -2248,55 +2258,47 @@ function clientExcelWorksheets() {
     ["Saldo sobre contrato inicial", excelCell(model.balance, "Money")],
     ["Última semana", excelCell(model.latestWeek?.contractValue || 0, "Money")],
     ["Promedio semanal", excelCell(model.averageWeek, "Money")],
-    ["Actividades con avance", `${model.summary.activeActivityCount} / ${model.summary.activityCount}`],
-    ["Alertas internas activas", activePending().length],
-    ["Vínculos externos detectados en auditoría", audit.externalRelationships || 0],
+    ["Semanas con avance", model.weeks.length],
   ];
 
   const weekRows = [
-    ...reportMetaRows("Avance por semana"),
-    excelHeader(["Semana", "Acta soporte", "Valor contractual", "Valor directo leído", "Avance acumulado", "Actividades", "Movimientos", "Cantidad reportada"]),
+    ...clientReportMetaRows("Avance por semana"),
+    excelHeader(["Semana", "Acta soporte", "Valor", "Avance acumulado", "Actividades"]),
     ...model.weeks.map((week) => [
       week.label,
       week.name,
       excelCell(week.contractValue, "Money"),
-      excelCell(week.directValue, "Money"),
       excelCell(week.cumulativeProgress, "Percent"),
       week.items,
-      week.movements,
-      week.quantity,
     ]),
   ];
 
   const chapterRows = [
-    ...reportMetaRows("Frentes principales"),
-    excelHeader(["Frente / capítulo", "Ejecutado contractual", "Ejecutado directo", "Presupuesto directo", "Avance", "Actividades con avance"]),
+    ...clientReportMetaRows("Frentes principales"),
+    excelHeader(["Frente / capítulo", "Ejecutado", "Avance", "Actividades con avance"]),
     ...model.chapters.map((chapter) => [
       chapter.name,
       excelCell(chapter.displayExecuted, "Money"),
-      excelCell(chapter.executed, "Money"),
-      excelCell(chapter.budget, "Money"),
       excelCell(chapter.progress, "Percent"),
       chapter.active,
     ]),
   ];
 
   const scopeRows = [
-    ...reportMetaRows("Alcance y decisiones"),
+    ...clientReportMetaRows("Resumen de alcance"),
     excelHeader(["Señal", "Valor", "Lectura"]),
-    ["Contrato inicial", excelCell(model.contractTotal, "Money"), "Registro leído como base del informe cliente desde la matriz presupuestal."],
-    ["Adicionales de obra", excelCell(model.additionalTotal, "Money"), "Suma de adicionales de obra leída para mostrar el alcance complementario."],
+    ["Contrato inicial", excelCell(model.contractTotal, "Money"), "Alcance inicial aprobado."],
+    ["Adicionales de obra", excelCell(model.additionalTotal, "Money"), "Alcance complementario consolidado."],
     ["Gran total obra", excelCell(model.grandTotal, "Money"), "Suma del contrato inicial y los adicionales de obra."],
-    ["Presupuesto actualizado directo", excelCell(model.summary.updatedTotal || 0, "Money"), "Valor directo resultante de cantidades actualizadas dentro de la hoja de cortes."],
-    ["No ejecutado directo", excelCell(model.summary.notExecutedTotal || 0, "Money"), "Valor directo identificado como no ejecutado en la lectura actual del archivo."],
-    ["Adicional estimado directo", excelCell(model.summary.additionalTotal || 0, "Money"), "Lectura técnica; requiere revisión de alcance antes de presentarse como decisión final."],
-    ["Alertas internas", activePending().length, "Pendientes que conviene resolver antes de entregar una versión formal al cliente."],
+    ["Última semana valorizada", excelCell(model.latestWeek?.contractValue || 0, "Money"), "Valor del corte semanal más reciente incluido en el informe."],
+    ["Saldo contrato inicial", excelCell(model.balance, "Money"), "Valor pendiente frente al contrato inicial aprobado."],
+    ["Avance sobre total obra", excelCell(model.totalProgress, "Percent"), "Ejecutado actual frente a contrato inicial más adicionales."],
   ];
 
   return [
     { name: "Resumen cliente", widths: [190, 180, 380], rows: summaryRows },
-    { name: "Avance semanal", widths: [92, 150, 126, 126, 104, 94, 94, 110], rows: weekRows },
-    { name: "Frentes", widths: [300, 132, 132, 132, 92, 120], rows: chapterRows },
+    { name: "Avance semanal", widths: [92, 150, 126, 104, 94], rows: weekRows },
+    { name: "Frentes", widths: [300, 132, 92, 120], rows: chapterRows },
     { name: "Alcance", widths: [220, 132, 420], rows: scopeRows },
   ];
 }
@@ -2431,8 +2433,8 @@ function exportClientExcel() {
   exportExcelWorkbook(`${projectSlug()}-informe-cliente-${fileDateStamp()}.xls`, clientExcelWorksheets());
   openInspector("Excel cliente generado", "Descargué un libro compatible con Excel con resumen, avance por semana, frentes y señales de alcance.", [
     ["Proyecto", projectName()],
-    ["Fuente", `${state.data.project.sourceWorkbook} · ${state.data.project.sourceSheet || "CORTES_OBRA"}`],
-    ["Vínculos externos", "No se crean vínculos externos en este exportable"],
+    ["Corte", state.data.project.generatedAt || state.data.project.updatedAt || "Sin fecha"],
+    ["Contenido", "Información consolidada para cliente"],
   ]);
 }
 
@@ -2687,13 +2689,13 @@ function clientReportHtml(model = clientReportModel()) {
         <div>
           <p class="kicker">Informe de avance para cliente</p>
           <h1>${escapeHtml(projectName())}</h1>
-          <p class="date-note">${escapeHtml(projectSubtitle())}<br/>Corte generado desde ${escapeHtml(model.project.sourceSheet || "CORTES_OBRA")} · ${escapeHtml(model.project.generatedAt || model.project.updatedAt || "sin fecha")}</p>
+          <p class="date-note">${escapeHtml(projectSubtitle())}<br/>Corte actualizado · ${escapeHtml(model.project.generatedAt || model.project.updatedAt || "sin fecha")}</p>
         </div>
         <img src="${logo}" alt="Tottem Architecture" />
       </header>
       <section class="summary">
-        <div><span>Contrato inicial · G238</span><strong>${formatMoney(model.contractTotal)}</strong></div>
-        <div><span>Adicionales de obra · I238</span><strong>${formatMoney(model.additionalTotal)}</strong></div>
+        <div><span>Contrato inicial</span><strong>${formatMoney(model.contractTotal)}</strong></div>
+        <div><span>Adicionales de obra</span><strong>${formatMoney(model.additionalTotal)}</strong></div>
         <div><span>Gran total obra</span><strong>${formatMoney(model.grandTotal)}</strong></div>
         <div><span>Ejecutado a corte</span><strong>${formatMoney(model.executedTotal)}</strong></div>
       </section>
@@ -2722,15 +2724,15 @@ function clientReportHtml(model = clientReportModel()) {
         </table>
       </section>
       <section class="block">
-        <h2>Alcance y decisiones</h2>
+        <h2>Resumen de alcance</h2>
         <div class="scope">
           <div><span>Última semana</span><strong>${formatMoney(model.latestWeek?.contractValue || 0)}</strong></div>
           <div><span>Saldo contrato inicial</span><strong>${formatMoney(model.balance)}</strong></div>
-          <div><span>Alertas internas</span><strong>${activePending().length}</strong></div>
+          <div><span>Avance sobre total obra</span><strong>${formatPercent(model.totalProgress)}</strong></div>
         </div>
       </section>
       <footer>
-        Fuente: ${escapeHtml(model.project.sourceWorkbook)} · ${escapeHtml(model.project.sourceSheet || "CORTES_OBRA")}. Reporte generado desde Obra Control el ${escapeHtml(reportTimestamp())}. Este exportable no modifica el Excel fuente ni crea vínculos externos.
+        Reporte cliente generado por Tottem Architecture el ${escapeHtml(reportTimestamp())}. Este exportable presenta información consolidada de avance de obra.
       </footer>
     </main>
   </body>
@@ -2752,7 +2754,7 @@ function exportClientPdf() {
   openInspector("PDF cliente preparado", "Abrí una versión A4 con lenguaje Tottem. Usa el botón Guardar como PDF dentro del informe.", [
     ["Formato", "A4"],
     ["Lectura", "Avance por semana"],
-    ["Excel fuente", "Sin cambios"],
+    ["Contenido", "Información consolidada para cliente"],
   ]);
 }
 
@@ -2884,6 +2886,7 @@ function renderAll() {
 function bindEvents() {
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.addEventListener("click", () => {
+      if (CLIENT_MEETING_MODE && button.dataset.section !== "client") return;
       state.section = button.dataset.section;
       history.replaceState(null, "", `#${state.section}`);
       document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
@@ -2895,6 +2898,7 @@ function bindEvents() {
 
   document.querySelectorAll(".signal").forEach((button) => {
     button.addEventListener("click", () => {
+      if (CLIENT_MEETING_MODE && button.dataset.focus !== "client") return;
       document.querySelectorAll(".signal").forEach((item) => item.classList.remove("active"));
       button.classList.add("active");
       document.querySelector(`.nav-item[data-section="${button.dataset.focus}"]`)?.click();
@@ -3049,7 +3053,9 @@ async function boot() {
   setDefaultEntryDate();
   renderAll();
   const initialSection = location.hash.replace("#", "");
-  if (initialSection && document.getElementById(initialSection)) {
+  if (CLIENT_MEETING_MODE) {
+    document.querySelector(`.nav-item[data-section="client"]`)?.click();
+  } else if (initialSection && document.getElementById(initialSection)) {
     document.querySelector(`.nav-item[data-section="${initialSection}"]`)?.click();
   }
 }

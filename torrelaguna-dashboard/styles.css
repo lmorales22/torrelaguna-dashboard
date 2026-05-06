@@ -136,6 +136,20 @@ td small {
   background: #f4f1ea;
 }
 
+.nav-item.locked,
+.nav-item:disabled {
+  color: rgba(158, 168, 161, 0.42);
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.nav-item.locked:hover,
+.nav-item:disabled:hover {
+  color: rgba(158, 168, 161, 0.42);
+  background: transparent;
+  transform: none;
+}
+
 .sidebar-note {
   margin-top: auto;
   padding-top: 18px;
@@ -237,6 +251,19 @@ h2 {
   background: var(--accent-dark);
   border-color: var(--accent-dark);
   color: #fff;
+}
+
+.client-meeting-mode .sidebar-note,
+.client-meeting-mode .client-only-hidden {
+  display: none;
+}
+
+.client-meeting-mode .topbar-actions {
+  align-items: start;
+}
+
+.client-meeting-mode .section:not(#client) {
+  display: none !important;
 }
 
 .search {
