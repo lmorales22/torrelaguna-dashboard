@@ -35,7 +35,7 @@ const ALIAS_KEY_PREFIX = "obra-control-alias-memory";
 const DEFAULT_DATA_URL = "./data/torrelaguna.json?v=20260506-client-meeting-latest";
 const DEFAULT_CATALOG_URL = "./data/apu_catalog.json";
 const PACKAGE_SCHEMA_VERSION = "obra-control.v0.3";
-const DASHBOARD_BUILD = "20260506-client-meeting-latest";
+const DASHBOARD_BUILD = "20260506-client-meeting-latest-v2";
 const CLIENT_MEETING_MODE = document.body.classList.contains("client-meeting-mode");
 const DEFAULT_UNITS = ["m2", "ml", "m", "und", "gl", "kg", "m3"];
 const DEFAULT_SOURCES = ["Medina", "Albeiro", "Grillo", "Jairo", "Visita de obra", "Memoria de obra", "Foto soporte"];
