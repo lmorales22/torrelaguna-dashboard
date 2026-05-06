@@ -32,7 +32,7 @@ const DECISION_KEY_PREFIX = "obra-control-local-decisions";
 const MOVEMENT_KEY_PREFIX = "obra-control-local-movements";
 const CONTEXT_KEY_PREFIX = "obra-control-daily-context";
 const ALIAS_KEY_PREFIX = "obra-control-alias-memory";
-const DEFAULT_DATA_URL = "./data/torrelaguna.json";
+const DEFAULT_DATA_URL = "./data/torrelaguna.json?v=20260506-client-meeting-latest";
 const DEFAULT_CATALOG_URL = "./data/apu_catalog.json";
 const PACKAGE_SCHEMA_VERSION = "obra-control.v0.3";
 const DASHBOARD_BUILD = "20260506-client-meeting-latest";
